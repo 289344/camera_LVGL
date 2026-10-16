@@ -8,6 +8,7 @@
 
 #include "camera/camera_device.h"
 #include "preview/frame_pool.h"
+#include "recording/recording_service.h"
 
 class Ui;
 
@@ -26,10 +27,11 @@ public:
     void stopPreview();
     bool isPreviewing() const { return previewing_.load(); }
 
-    // 录像（后续阶段实现）
+    // 录像
     void startRecording();
     void stopRecording();
     void toggleRecording();
+    bool isRecording() const { return recording_.load(); }
 
     // 文件传输（后续阶段实现）
     void transferSelectedFile();
@@ -54,6 +56,10 @@ private:
     int selectedCamera_ = 0;
 
     std::atomic<bool> previewing_{false};
+    std::atomic<bool> recording_{false};
+
+    recording::RecordingService recorder_;
+    std::vector<uint8_t> jpegEncodeBuf_;   // 仅采集线程使用
 
     uint32_t previewW_ = 0;
     uint32_t previewH_ = 0;

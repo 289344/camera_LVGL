@@ -3,6 +3,7 @@
 #include <vector>
 #include <cstdio>
 #include <cstring>
+#include <cstdlib>
 #include <jpeglib.h>
 
 namespace preview {
@@ -106,6 +107,60 @@ bool jpegToRgb565(const uint8_t *jpeg, size_t size, uint16_t *dst,
 
     jpeg_finish_decompress(&cinfo);
     jpeg_destroy_decompress(&cinfo);
+    return ok;
+}
+
+namespace {
+void yuyvRowToRgb(const uint8_t *src, uint8_t *dst, uint32_t width) {
+    for (uint32_t x = 0; x + 1 < width; x += 2) {
+        int y0 = src[x * 2 + 0];
+        int u = src[x * 2 + 1] - 128;
+        int y1 = src[x * 2 + 2];
+        int v = src[x * 2 + 3] - 128;
+        int c = y0 - 16;
+        dst[x * 3 + 0] = static_cast<uint8_t>(clamp255((298 * c + 409 * v + 128) >> 8));
+        dst[x * 3 + 1] = static_cast<uint8_t>(clamp255((298 * c - 100 * u - 208 * v + 128) >> 8));
+        dst[x * 3 + 2] = static_cast<uint8_t>(clamp255((298 * c + 516 * u + 128) >> 8));
+        c = y1 - 16;
+        dst[x * 3 + 3] = static_cast<uint8_t>(clamp255((298 * c + 409 * v + 128) >> 8));
+        dst[x * 3 + 4] = static_cast<uint8_t>(clamp255((298 * c - 100 * u - 208 * v + 128) >> 8));
+        dst[x * 3 + 5] = static_cast<uint8_t>(clamp255((298 * c + 516 * u + 128) >> 8));
+    }
+}
+}  // namespace
+
+bool yuyvToJpeg(const uint8_t *yuyv, uint32_t width, uint32_t height,
+                std::vector<uint8_t> &outJpeg, int quality) {
+    jpeg_compress_struct cinfo;
+    jpeg_error_mgr jerr;
+    cinfo.err = jpeg_std_error(&jerr);
+    jpeg_create_compress(&cinfo);
+
+    uint8_t *outbuf = nullptr;
+    unsigned long outsize = 0;
+    jpeg_mem_dest(&cinfo, &outbuf, &outsize);
+
+    cinfo.image_width = width;
+    cinfo.image_height = height;
+    cinfo.input_components = 3;
+    cinfo.in_color_space = JCS_RGB;
+    jpeg_set_defaults(&cinfo);
+    jpeg_set_quality(&cinfo, quality, TRUE);
+    jpeg_start_compress(&cinfo, TRUE);
+
+    std::vector<uint8_t> rgbRow(static_cast<size_t>(width) * 3);
+    while (cinfo.next_scanline < cinfo.image_height) {
+        uint32_t y = cinfo.next_scanline;
+        yuyvRowToRgb(yuyv + static_cast<size_t>(y) * width * 2, rgbRow.data(), width);
+        JSAMPROW rowptr[1] = {rgbRow.data()};
+        jpeg_write_scanlines(&cinfo, rowptr, 1);
+    }
+    jpeg_finish_compress(&cinfo);
+    jpeg_destroy_compress(&cinfo);
+
+    bool ok = outbuf != nullptr && outsize > 0;
+    if (ok) outJpeg.assign(outbuf, outbuf + outsize);
+    if (outbuf) std::free(outbuf);
     return ok;
 }
 
