@@ -7,6 +7,7 @@
 #include "ui/ui.h"
 #include "preview/pixel_converter.h"
 #include "file_manager/file_manager.h"
+#include "file_transfer/file_transfer_service.h"
 
 namespace {
 constexpr uint32_t kMJPG = v4l2_fourcc('M', 'J', 'P', 'G');
@@ -200,6 +201,21 @@ void AppController::tick() {
         ui_->setRecordState(true, secs);
     }
 
+    if (transfer_.isTransferring() || transfer_.finished()) {
+        ui_->setTransferProgress(transfer_.progressPercent());
+    }
+    if (transfer_.finished()) {
+        auto r = transfer_.takeResult();
+        if (r.success) {
+            ui_->setTransferProgress(100);
+            ui_->setTransferStatus("OK -> " + r.dstPath, 0x66cc66);
+            ui_->setStatusText("Transfer complete", 0x66cc66);
+        } else {
+            ui_->setTransferStatus("Failed: " + r.error, 0xff5555);
+            ui_->setStatusText("Transfer failed", 0xff5555);
+        }
+    }
+
     if (previewing_.load() && pool_) {
         int idx = pool_->tryGetLatest();
         if (idx >= 0) {
@@ -280,5 +296,25 @@ void AppController::selectFile(int row) {
 }
 
 void AppController::transferSelectedFile() {
-    if (ui_) ui_->setStatusText("Transfer not implemented yet", 0xffaa44);
+    if (!ui_) return;
+    if (transfer_.isTransferring()) {
+        ui_->setStatusText("A transfer is already running", 0xffaa44);
+        return;
+    }
+    if (selectedFile_ < 0 || selectedFile_ >= static_cast<int>(files_.size())) {
+        ui_->setStatusText("Please select a file first", 0xffaa44);
+        return;
+    }
+
+    const std::string &src = files_[selectedFile_].path;
+    if (!transfer_.start(src, receivedDir_)) {
+        auto r = transfer_.takeResult();
+        ui_->setTransferStatus(r.error, 0xff5555);
+        ui_->setStatusText("Transfer failed", 0xff5555);
+        return;
+    }
+
+    ui_->setTransferProgress(0);
+    ui_->setTransferStatus("Transferring...", 0xcccccc);
+    ui_->setStatusText("Transfer started", 0x66cc66);
 }

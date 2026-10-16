@@ -10,6 +10,7 @@
 #include "preview/frame_pool.h"
 #include "recording/recording_service.h"
 #include "file_manager/file_manager.h"
+#include "file_transfer/file_transfer_service.h"
 
 class Ui;
 
@@ -66,6 +67,8 @@ private:
 
     recording::RecordingService recorder_;
     std::vector<uint8_t> jpegEncodeBuf_;   // 仅采集线程使用
+
+    transfer::FileTransferService transfer_;
 
     uint32_t previewW_ = 0;
     uint32_t previewH_ = 0;
