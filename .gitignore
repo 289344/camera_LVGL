@@ -1,0 +1,16 @@
+# Build output
+/build/
+*.o
+*.a
+*.so
+cmake-build-*/
+
+# Runtime generated data
+/recordings/
+/received/
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+*~
