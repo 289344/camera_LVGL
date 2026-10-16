@@ -28,6 +28,7 @@ int main(void) {
     ui.onStopPreview = []() { controller.stopPreview(); };
     ui.onRecordToggle = []() { controller.toggleRecording(); };
     ui.onTransfer = []() { controller.transferSelectedFile(); };
+    ui.onFileSelect = [](int row) { controller.selectFile(row); };
 
     lv_timer_create(uiTick, 33, nullptr);  // ~30fps 的 UI 刷新
 

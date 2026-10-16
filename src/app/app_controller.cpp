@@ -6,6 +6,7 @@
 
 #include "ui/ui.h"
 #include "preview/pixel_converter.h"
+#include "file_manager/file_manager.h"
 
 namespace {
 constexpr uint32_t kMJPG = v4l2_fourcc('M', 'J', 'P', 'G');
@@ -27,6 +28,7 @@ void AppController::init(Ui *ui) {
     buildCameraList();
     ui_->setCameraList(cameras_, selectedCamera_);
     ui_->setSaveDirText(recordingsDir_);
+    refreshFileList();
 }
 
 void AppController::buildCameraList() {
@@ -188,6 +190,8 @@ std::string AppController::popError() {
 void AppController::tick() {
     if (!ui_) return;
 
+    if (++fileRefreshCounter_ % 30 == 0) refreshFileList();
+
     std::string err = popError();
     if (!err.empty()) ui_->setStatusText(err, 0xff5555);
 
@@ -245,11 +249,34 @@ void AppController::stopRecording() {
             ui_->setStatusText("Recording error: " + recorder_.lastError(), 0xff5555);
         }
     }
+    refreshFileList();
 }
 
 void AppController::toggleRecording() {
     if (recording_.load()) stopRecording();
     else startRecording();
+}
+
+void AppController::refreshFileList() {
+    files_ = filemanager::FileManager::list(recordingsDir_);
+    if (!ui_) return;
+    std::vector<std::vector<std::string>> rows;
+    rows.reserve(files_.size());
+    for (const auto &f : files_) {
+        rows.push_back({f.name, filemanager::FileManager::formatSize(f.size), f.created});
+    }
+    ui_->setFileTable(rows);
+    if (selectedFile_ >= static_cast<int>(files_.size())) {
+        selectedFile_ = -1;
+        ui_->setTransferEnabled(false);
+    }
+}
+
+void AppController::selectFile(int row) {
+    selectedFile_ = row;
+    if (ui_) {
+        ui_->setTransferEnabled(row >= 0 && row < static_cast<int>(files_.size()));
+    }
 }
 
 void AppController::transferSelectedFile() {

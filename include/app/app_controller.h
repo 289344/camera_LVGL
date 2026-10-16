@@ -9,6 +9,7 @@
 #include "camera/camera_device.h"
 #include "preview/frame_pool.h"
 #include "recording/recording_service.h"
+#include "file_manager/file_manager.h"
 
 class Ui;
 
@@ -32,6 +33,11 @@ public:
     void stopRecording();
     void toggleRecording();
     bool isRecording() const { return recording_.load(); }
+
+    // 文件管理
+    void refreshFileList();
+    void selectFile(int row);
+    const std::vector<filemanager::FileInfo> &files() const { return files_; }
 
     // 文件传输（后续阶段实现）
     void transferSelectedFile();
@@ -70,4 +76,8 @@ private:
 
     std::string recordingsDir_;
     std::string receivedDir_;
+
+    std::vector<filemanager::FileInfo> files_;
+    int selectedFile_ = -1;
+    uint32_t fileRefreshCounter_ = 0;
 };
