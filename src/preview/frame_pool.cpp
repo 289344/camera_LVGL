@@ -1,6 +1,7 @@
 #include "preview/frame_pool.h"
 
 #include <cstring>
+#include <chrono>
 
 namespace preview {
 
@@ -23,7 +24,9 @@ FramePool::~FramePool() {
 
 int FramePool::acquireWrite() {
     std::unique_lock<std::mutex> lock(mutex_);
-    cv_.wait(lock, [this] { return !free_.empty(); });
+    if (!cv_.wait_for(lock, std::chrono::milliseconds(100), [this] { return !free_.empty(); })) {
+        return -1;  // 超时：GUI 消费不及时，丢弃本帧
+    }
     int idx = free_.front();
     free_.pop_front();
     return idx;

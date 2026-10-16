@@ -152,6 +152,7 @@ void AppController::stopPreview() {
 void AppController::handleFrame(const camera::Frame &frame) {
     if (!pool_) return;
     int idx = pool_->acquireWrite();
+    if (idx < 0) return;  // 没有可用缓冲，丢弃本帧
     uint16_t *dst = reinterpret_cast<uint16_t *>(pool_->data(idx));
 
     bool ok = false;

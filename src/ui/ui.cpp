@@ -292,6 +292,15 @@ void Ui::setPreviewFrame(const uint8_t *rgb565, uint32_t w, uint32_t h) {
     imageDsc_.reserved = nullptr;
     imageDsc_.reserved_2 = nullptr;
     lv_image_set_src(previewImage_, &imageDsc_);
+    // 等比缩放以适配中央预览区（约 452x540）
+    const uint32_t areaW = 452, areaH = 540;
+    uint32_t zoom = LV_SCALE_NONE;
+    uint32_t zw = areaW * 256 / w;
+    uint32_t zh = areaH * 256 / h;
+    zoom = zw < zh ? zw : zh;
+    if (zoom == 0) zoom = 1;
+    if (zoom > LV_SCALE_NONE) zoom = LV_SCALE_NONE;
+    lv_image_set_scale(previewImage_, zoom);
     imageValid_ = true;
     lv_obj_remove_flag(previewImage_, LV_OBJ_FLAG_HIDDEN);
 }

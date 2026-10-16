@@ -1,0 +1,91 @@
+# camera_LVGL
+
+基于 LVGL 的嵌入式相机控制与视频管理应用（第一阶段：Ubuntu 24.04 PC 版）。
+
+实现功能：
+- LVGL 图形界面（SDL 窗口，支持鼠标）
+- 通过 V4L2 访问 `/dev/video0`、`/dev/video1`
+- 摄像头实时预览（支持 MJPG / YUYV，自动像素格式转换与缩放）
+- 开始 / 停止录像（MJPEG 封装为 AVI，后台线程写入，不阻塞 UI）
+- 本地录像文件列表（文件名、大小、时间）
+- 本机文件传输（异步复制到另一个目录，显示进度与结果）
+
+## 环境要求
+
+- Ubuntu 24.04
+- GCC/G++ 与 CMake（>= 3.16）
+- SDL2 开发库：`libsdl2-dev`
+- libjpeg-turbo 开发库：`libjpeg-turbo8-dev`
+
+安装依赖：
+
+```bash
+sudo apt-get update
+sudo apt-get install -y build-essential cmake pkg-config libsdl2-dev libjpeg-turbo8-dev
+```
+
+## 构建
+
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j"$(nproc)"
+```
+
+## 运行
+
+```bash
+./build/camera_lvgl
+```
+
+界面操作流程：
+
+1. 在左上角下拉框选择摄像头（`/dev/video0` 或 `/dev/video1`）。
+2. 点击 **Start Preview** 开始预览，**Stop Preview** 停止预览。
+3. 点击 **Start Recording** 开始录像，再次点击 **Stop Recording** 停止录像。
+4. 录像文件默认保存到项目根目录 `recordings/`，右侧面板会自动刷新列表。
+5. 在列表中选择一个文件，点击 **Transfer** 将其复制到项目根目录 `received/`。
+
+## 目录结构
+
+```text
+camera_LVGL/
+├── CMakeLists.txt
+├── lv_conf.h              # LVGL 配置
+├── include/               # 各模块公共头文件
+│   ├── camera/            # V4L2 摄像头
+│   ├── preview/           # 帧缓冲池与像素格式转换
+│   ├── recording/         # AVI 封装与录像服务
+│   ├── file_manager/      # 录像文件管理
+│   ├── file_transfer/     # 本机文件传输
+│   └── app/               # 应用控制器
+├── src/                   # 实现
+│   ├── main.cpp
+│   ├── ui/                # LVGL 界面
+│   ├── camera/ preview/ recording/ file_manager/ file_transfer/ app/
+├── third_party/lvgl/      # LVGL 9.5（内置源码）
+├── tests/                 # 独立测试程序
+└── build/                 # CMake 构建产物（已 gitignore）
+```
+
+## 设计说明
+
+- **线程模型**：GUI 线程运行 LVGL；摄像头采集线程负责取帧与像素转换；录像写入线程负责 AVI 封装落盘；文件传输线程负责复制。耗时任务均不阻塞 GUI。
+- **预览帧交换**：采集线程解码到 RGB565 帧缓冲池，GUI 定时器无撕裂地取最新帧显示。
+- **录像格式**：优先使用摄像头硬件 MJPEG 输出，直接封装为 AVI（MJPG fourcc），无需额外编码库；若摄像头仅支持 YUYV，则软件编码为 JPEG 后再封装。
+- **可移植性**：摄像头、录像、文件管理、文件传输均为独立模块，便于后续移植到 i.MX6ULL Pro 时替换底层实现。
+
+## 测试
+
+```bash
+# 端到端录像测试（无需 GUI），采集 2 秒并生成 AVI
+g++ -std=c++17 -O2 -Iinclude -Isrc tests/test_record.cpp \
+    src/camera/camera_device.cpp src/recording/avi_muxer.cpp \
+    src/recording/recording_service.cpp -o /tmp/test_record -lpthread
+/tmp/test_record
+```
+
+## 注意事项
+
+- 录像与传输默认使用相对目录 `recordings/`、`received/`，如需修改可在 `src/app/app_controller.cpp` 的构造函数中调整。
+- 当前仅实现 PC 本机文件传输；板端网络传输接口将在后续阶段补充。
+- 界面文案为英文，便于使用 LVGL 内置字体；如需中文界面，需额外添加 CJK 字体。

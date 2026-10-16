@@ -201,9 +201,6 @@ bool CameraDevice::start(FrameCallback cb) {
 }
 
 void CameraDevice::stop() {
-    if (!streaming_.load() && !thread_.joinable()) {
-        // 尚未开始采集
-    }
     stopRequested_.store(true);
     if (fd_ >= 0) {
         v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
