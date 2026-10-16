@@ -1,0 +1,67 @@
+#pragma once
+
+#include <atomic>
+#include <memory>
+#include <mutex>
+#include <string>
+#include <vector>
+
+#include "camera/camera_device.h"
+#include "preview/frame_pool.h"
+
+class Ui;
+
+/** 协调 UI 与各业务模块。 */
+class AppController {
+public:
+    AppController();
+    ~AppController();
+
+    void init(Ui *ui);
+
+    // 相机
+    const std::vector<std::string> &cameraList() const { return cameras_; }
+    void selectCamera(int index);
+    void startPreview();
+    void stopPreview();
+    bool isPreviewing() const { return previewing_.load(); }
+
+    // 录像（后续阶段实现）
+    void startRecording();
+    void stopRecording();
+    void toggleRecording();
+
+    // 文件传输（后续阶段实现）
+    void transferSelectedFile();
+
+    // 由 GUI 定时器调用（主线程）
+    void tick();
+
+    const std::string &recordingsDir() const { return recordingsDir_; }
+    const std::string &receivedDir() const { return receivedDir_; }
+
+private:
+    void buildCameraList();
+    bool chooseFormat(camera::CameraDevice &dev, uint32_t &pixfmt, uint32_t &w, uint32_t &h);
+    void handleFrame(const camera::Frame &frame);
+    std::string popError();
+
+    Ui *ui_ = nullptr;
+    camera::CameraDevice camera_;
+    std::unique_ptr<preview::FramePool> pool_;
+
+    std::vector<std::string> cameras_;
+    int selectedCamera_ = 0;
+
+    std::atomic<bool> previewing_{false};
+
+    uint32_t previewW_ = 0;
+    uint32_t previewH_ = 0;
+    int displayedFrame_ = -1;
+
+    std::mutex errMutex_;
+    std::string pendingError_;
+
+    std::string recordingsDir_;
+    std::string receivedDir_;
+};

@@ -1,24 +1,35 @@
 #include "lvgl.h"
 
+#include "ui/ui.h"
+#include "app/app_controller.h"
+
+static Ui ui;
+static AppController controller;
+
+static void uiTick(lv_timer_t *timer) {
+    (void)timer;
+    controller.tick();
+}
+
 int main(void) {
     lv_init();
 
     lv_display_t *disp = lv_sdl_window_create(1024, 600);
-    if (!disp) {
-        return 1;
-    }
+    if (!disp) return 1;
     lv_sdl_mouse_create();
     lv_sdl_keyboard_create();
     lv_sdl_mousewheel_create();
 
-    lv_obj_t *scr = lv_screen_active();
-    lv_obj_set_style_bg_color(scr, lv_color_hex(0x1e1e2e), 0);
+    ui.init(disp);
+    controller.init(&ui);
 
-    lv_obj_t *label = lv_label_create(scr);
-    lv_label_set_text(label, "Camera LVGL - build OK");
-    lv_obj_set_style_text_color(label, lv_color_white(), 0);
-    lv_obj_set_style_text_font(label, &lv_font_montserrat_20, 0);
-    lv_obj_center(label);
+    ui.onCameraSelect = [](int i) { controller.selectCamera(i); };
+    ui.onStartPreview = []() { controller.startPreview(); };
+    ui.onStopPreview = []() { controller.stopPreview(); };
+    ui.onRecordToggle = []() { controller.toggleRecording(); };
+    ui.onTransfer = []() { controller.transferSelectedFile(); };
+
+    lv_timer_create(uiTick, 33, nullptr);  // ~30fps 的 UI 刷新
 
     while (1) {
         uint32_t delay = lv_timer_handler();
