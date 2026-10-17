@@ -83,13 +83,13 @@ void Ui::init(lv_display_t *disp, const lv_font_t *fontLarge) {
     }, LV_EVENT_CLICKED, this);
 
     y += 54;
-    lv_obj_t *stopP = lv_button_create(left);
-    lv_obj_set_size(stopP, kPanelW - 20, 44);
-    lv_obj_align(stopP, LV_ALIGN_TOP_LEFT, 0, y);
-    lv_obj_t *p2 = lv_label_create(stopP);
+    stopPreviewBtn_ = lv_button_create(left);
+    lv_obj_set_size(stopPreviewBtn_, kPanelW - 20, 44);
+    lv_obj_align(stopPreviewBtn_, LV_ALIGN_TOP_LEFT, 0, y);
+    lv_obj_t *p2 = lv_label_create(stopPreviewBtn_);
     lv_label_set_text(p2, "停止预览");
     lv_obj_center(p2);
-    lv_obj_add_event_cb(stopP, [](lv_event_t *e) {
+    lv_obj_add_event_cb(stopPreviewBtn_, [](lv_event_t *e) {
         auto *ui = static_cast<Ui *>(lv_event_get_user_data(e));
         if (ui->onStopPreview) ui->onStopPreview();
     }, LV_EVENT_CLICKED, this);
@@ -122,6 +122,17 @@ void Ui::init(lv_display_t *disp, const lv_font_t *fontLarge) {
     lv_label_set_long_mode(saveDirLabel_, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(saveDirLabel_, kPanelW - 20);
     lv_obj_align(saveDirLabel_, LV_ALIGN_TOP_LEFT, 0, y + 20);
+
+    testBtn_ = lv_button_create(left);
+    lv_obj_set_size(testBtn_, kPanelW - 20, 44);
+    lv_obj_align(testBtn_, LV_ALIGN_TOP_LEFT, 0, 390);
+    lv_obj_t *testLabel = lv_label_create(testBtn_);
+    lv_label_set_text(testLabel, "测试按键: 蓝");
+    lv_obj_center(testLabel);
+    lv_obj_add_event_cb(testBtn_, [](lv_event_t *e) {
+        auto *ui = static_cast<Ui *>(lv_event_get_user_data(e));
+        ui->toggleTestMode();
+    }, LV_EVENT_CLICKED, this);
 
     // ---- 中央预览区 ----
     lv_obj_t *center = lv_obj_create(screen_);
@@ -317,6 +328,20 @@ void Ui::setRecordButtons(bool recording) {
     if (recordBtn_) {
         lv_obj_t *label = lv_obj_get_child(recordBtn_, 0);
         lv_label_set_text(label, recording ? "停止录像" : "开始录像");
+    }
+}
+
+void Ui::toggleTestMode() {
+    testMode_ = !testMode_;
+    const lv_color_t color = lv_color_hex(testMode_ ? 0xF44336 : 0x2196F3);
+    lv_obj_t *buttons[] = {previewBtn_, stopPreviewBtn_, recordBtn_};
+    for (lv_obj_t *btn : buttons) {
+        if (btn) lv_obj_set_style_bg_color(btn, color, LV_STATE_DEFAULT);
+    }
+    if (testBtn_) {
+        lv_obj_t *label = lv_obj_get_child(testBtn_, 0);
+        lv_label_set_text(label, testMode_ ? "测试按键: 红" : "测试按键: 蓝");
+        lv_obj_set_style_bg_color(testBtn_, color, LV_STATE_DEFAULT);
     }
 }
 

@@ -43,13 +43,16 @@ public:
     int selectedFileIndex() const;
     void setTransferEnabled(bool enabled);
     void setRecordButtons(bool recording);
+    void toggleTestMode();
 
 private:
     const lv_font_t *fontLarge_ = nullptr;
     lv_obj_t *screen_ = nullptr;
     lv_obj_t *cameraDropdown_ = nullptr;
     lv_obj_t *previewBtn_ = nullptr;
+    lv_obj_t *stopPreviewBtn_ = nullptr;
     lv_obj_t *recordBtn_ = nullptr;
+    lv_obj_t *testBtn_ = nullptr;
     lv_obj_t *recordStateLabel_ = nullptr;
     lv_obj_t *saveDirLabel_ = nullptr;
     lv_obj_t *statusLabel_ = nullptr;
@@ -62,5 +65,6 @@ private:
 
     lv_image_dsc_t imageDsc_{};
     bool imageValid_ = false;
+    bool testMode_ = false;
     int selectedFile_ = -1;
 };
