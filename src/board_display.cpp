@@ -6,6 +6,7 @@
 #include <linux/fb.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
+#include <time.h>
 #include <unistd.h>
 #include <cerrno>
 #include <cstdint>
@@ -15,6 +16,12 @@
 namespace board {
 
 namespace {
+
+uint32_t tickGetCb() {
+    struct timespec t;
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    return static_cast<uint32_t>(t.tv_sec * 1000U + t.tv_nsec / 1000000U);
+}
 
 constexpr int kHorRes = 1024;
 constexpr int kVerRes = 600;
@@ -69,6 +76,8 @@ void deleteCb(lv_event_t *e) {
 }  // namespace
 
 lv_display_t *createDisplay() {
+    lv_tick_set_cb(tickGetCb);
+
     lv_display_t *disp = lv_display_create(kHorRes, kVerRes);
     if (!disp) return nullptr;
 

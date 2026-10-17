@@ -22,9 +22,9 @@ int main(void) {
     lv_indev_t *touch = lv_evdev_create(LV_INDEV_TYPE_POINTER, "/dev/input/event1");
     if (touch) {
         lv_indev_set_display(touch, disp);
-        // goodix-ts 在该板上的 ABS_MT 范围为 0..800 / 0..480，
-        // 显式映射到 1024x600 屏幕，避免 evdev 读到全 0 导致触摸点被钳制到左上角。
-        lv_evdev_set_calibration(touch, 0, 0, 800, 480);
+        // 该板 goodix-ts 的 ABS_MT 实际已按屏幕像素输出，范围为 0..1023 / 0..599。
+        // 不要用内核 absinfo 里的 0..800/0..480，否则触摸点会被错误缩放。
+        lv_evdev_set_calibration(touch, 0, 0, 1023, 599);
     }
 #else
     lv_display_t *disp = lv_sdl_window_create(1024, 600);
