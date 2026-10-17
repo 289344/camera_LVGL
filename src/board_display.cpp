@@ -37,14 +37,16 @@ void flushCb(lv_display_t *disp, const lv_area_t *area, uint8_t *color) {
 
     const int32_t w = lv_area_get_width(area);
     const int32_t h = lv_area_get_height(area);
-    const uint32_t srcStride = static_cast<uint32_t>(w) * kBytesPerPixel;
+    const uint32_t srcStride = static_cast<uint32_t>(kHorRes) * kBytesPerPixel;
+    const uint32_t rowSize = static_cast<uint32_t>(w) * kBytesPerPixel;
 
-    uint8_t *src = color;
+    uint8_t *src = color + static_cast<uint32_t>(area->y1) * srcStride +
+                   static_cast<uint32_t>(area->x1) * kBytesPerPixel;
     uint8_t *dst = ctx->map + static_cast<uint32_t>(area->x1) * kBytesPerPixel +
                    static_cast<uint32_t>(area->y1) * ctx->lineLength;
 
     for (int32_t y = 0; y < h; ++y) {
-        lv_memcpy(dst, src, srcStride);
+        lv_memcpy(dst, src, rowSize);
         src += srcStride;
         dst += ctx->lineLength;
     }
