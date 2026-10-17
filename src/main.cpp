@@ -22,14 +22,20 @@ int main(void) {
     lv_sdl_mousewheel_create();
 
     // 中文字体：FreeType 渲染
+    // 所选 CJK 字体（如 Droid Sans Fallback）可能不含拉丁/数字字形，
+    // 因此把内置 Montserrat 作为回退字体，避免英文和数字显示为方框。
     lv_freetype_init(512);
-    const lv_font_t *cjkNormal = ui::loadCjkFont(16);
-    const lv_font_t *cjkLarge = ui::loadCjkFont(20);
-    lv_theme_default_init(disp, lv_palette_main(LV_PALETTE_BLUE),
-                          lv_palette_main(LV_PALETTE_RED), true,
-                          cjkNormal ? cjkNormal : LV_FONT_DEFAULT);
+    lv_font_t *cjkNormal = ui::loadCjkFont(16);
+    lv_font_t *cjkLarge = ui::loadCjkFont(20);
+    if (cjkNormal) cjkNormal->fallback = &lv_font_montserrat_16;
+    if (cjkLarge) cjkLarge->fallback = &lv_font_montserrat_20;
 
-    gUi.init(disp, cjkLarge ? cjkLarge : LV_FONT_DEFAULT);
+    const lv_font_t *themeFont = cjkNormal ? cjkNormal : LV_FONT_DEFAULT;
+    const lv_font_t *titleFont = cjkLarge ? cjkLarge : LV_FONT_DEFAULT;
+    lv_theme_default_init(disp, lv_palette_main(LV_PALETTE_BLUE),
+                          lv_palette_main(LV_PALETTE_RED), true, themeFont);
+
+    gUi.init(disp, titleFont);
     gController.init(&gUi);
 
     gUi.onCameraSelect = [](int i) { gController.selectCamera(i); };
