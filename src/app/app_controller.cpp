@@ -41,7 +41,7 @@ void AppController::buildCameraList() {
             probe.close();
         }
     }
-    if (cameras_.empty()) cameras_.emplace_back("(no camera)");
+    if (cameras_.empty()) cameras_.emplace_back("(无摄像头)");
 }
 
 void AppController::selectCamera(int index) {
@@ -95,13 +95,13 @@ void AppController::startPreview() {
     if (!ui_) return;
     if (previewing_.load()) return;
     if (selectedCamera_ < 0 || selectedCamera_ >= static_cast<int>(cameras_.size())) {
-        ui_->setStatusText("No camera available", 0xff5555);
+        ui_->setStatusText("无可用摄像头", 0xff5555);
         return;
     }
 
     const std::string path = cameras_[selectedCamera_];
     if (!camera_.open(path)) {
-        ui_->setStatusText("Failed to open " + path, 0xff5555);
+        ui_->setStatusText("打开摄像头失败: " + path, 0xff5555);
         return;
     }
 
@@ -109,7 +109,7 @@ void AppController::startPreview() {
     if (!chooseFormat(camera_, pixfmt, w, h) || !camera_.setFormat(pixfmt, w, h)) {
         std::string err = camera_.lastError();
         camera_.close();
-        ui_->setStatusText("Format error: " + err, 0xff5555);
+        ui_->setStatusText("格式错误: " + err, 0xff5555);
         return;
     }
 
@@ -122,13 +122,13 @@ void AppController::startPreview() {
         std::string err = camera_.lastError();
         camera_.close();
         pool_.reset();
-        ui_->setStatusText("Stream error: " + err, 0xff5555);
+        ui_->setStatusText("采集失败: " + err, 0xff5555);
         return;
     }
 
     previewing_.store(true);
-    ui_->setPreviewInfoText("Starting...");
-    ui_->setStatusText("Previewing " + path, 0x66cc66);
+    ui_->setPreviewInfoText("启动中...");
+    ui_->setStatusText("预览中: " + path, 0x66cc66);
 }
 
 void AppController::stopPreview() {
@@ -145,7 +145,7 @@ void AppController::stopPreview() {
     previewing_.store(false);
     if (ui_) {
         ui_->clearPreview();
-        ui_->setStatusText("Preview stopped");
+        ui_->setStatusText("预览已停止");
     }
 }
 
@@ -178,7 +178,7 @@ void AppController::handleFrame(const camera::Frame &frame) {
     } else {
         pool_->release(idx);
         std::lock_guard<std::mutex> lk(errMutex_);
-        if (pendingError_.empty()) pendingError_ = "Frame decode failed";
+        if (pendingError_.empty()) pendingError_ = "帧解码失败";
     }
 }
 
@@ -209,11 +209,11 @@ void AppController::tick() {
         auto r = transfer_.takeResult();
         if (r.success) {
             ui_->setTransferProgress(100);
-            ui_->setTransferStatus("OK -> " + r.dstPath, 0x66cc66);
-            ui_->setStatusText("Transfer complete", 0x66cc66);
+            ui_->setTransferStatus("成功 -> " + r.dstPath, 0x66cc66);
+            ui_->setStatusText("传输完成", 0x66cc66);
         } else {
-            ui_->setTransferStatus("Failed: " + r.error, 0xff5555);
-            ui_->setStatusText("Transfer failed", 0xff5555);
+            ui_->setTransferStatus("失败: " + r.error, 0xff5555);
+            ui_->setStatusText("传输失败", 0xff5555);
         }
     }
 
@@ -232,7 +232,7 @@ void AppController::startRecording() {
     if (!ui_) return;
     if (recording_.load()) return;
     if (!previewing_.load() || !pool_) {
-        ui_->setStatusText("Please start preview first", 0xffaa44);
+        ui_->setStatusText("请先开始预览", 0xffaa44);
         return;
     }
 
@@ -244,13 +244,13 @@ void AppController::startRecording() {
     cfg.fpsDen = 1;
 
     if (!recorder_.start(cfg)) {
-        ui_->setStatusText("Recording failed: " + recorder_.lastError(), 0xff5555);
+        ui_->setStatusText("录像失败: " + recorder_.lastError(), 0xff5555);
         return;
     }
     recording_.store(true);
     ui_->setRecordButtons(true);
     ui_->setRecordState(true, 0);
-    ui_->setStatusText("Recording started", 0x66cc66);
+    ui_->setStatusText("录像已开始", 0x66cc66);
 }
 
 void AppController::stopRecording() {
@@ -261,9 +261,9 @@ void AppController::stopRecording() {
         ui_->setRecordButtons(false);
         ui_->setRecordState(false, 0);
         if (recorder_.lastError().empty()) {
-            ui_->setStatusText("Saved: " + recorder_.filePath(), 0x66cc66);
+            ui_->setStatusText("已保存: " + recorder_.filePath(), 0x66cc66);
         } else {
-            ui_->setStatusText("Recording error: " + recorder_.lastError(), 0xff5555);
+            ui_->setStatusText("录像错误: " + recorder_.lastError(), 0xff5555);
         }
     }
     refreshFileList();
@@ -299,23 +299,23 @@ void AppController::selectFile(int row) {
 void AppController::transferSelectedFile() {
     if (!ui_) return;
     if (transfer_.isTransferring()) {
-        ui_->setStatusText("A transfer is already running", 0xffaa44);
+        ui_->setStatusText("已有传输进行中", 0xffaa44);
         return;
     }
     if (selectedFile_ < 0 || selectedFile_ >= static_cast<int>(files_.size())) {
-        ui_->setStatusText("Please select a file first", 0xffaa44);
+        ui_->setStatusText("请先选择文件", 0xffaa44);
         return;
     }
 
     const std::string &src = files_[selectedFile_].path;
     if (!transfer_.start(src, receivedDir_)) {
         auto r = transfer_.takeResult();
-        ui_->setTransferStatus(r.error, 0xff5555);
-        ui_->setStatusText("Transfer failed", 0xff5555);
+        ui_->setTransferStatus("失败: " + r.error, 0xff5555);
+        ui_->setStatusText("传输失败", 0xff5555);
         return;
     }
 
     ui_->setTransferProgress(0);
-    ui_->setTransferStatus("Transferring...", 0xcccccc);
-    ui_->setStatusText("Transfer started", 0x66cc66);
+    ui_->setTransferStatus("传输中...", 0xcccccc);
+    ui_->setStatusText("传输已开始", 0x66cc66);
 }

@@ -1,14 +1,15 @@
 #include "lvgl.h"
 
 #include "ui/ui.h"
+#include "ui/fonts.h"
 #include "app/app_controller.h"
 
-static Ui ui;
-static AppController controller;
+static Ui gUi;
+static AppController gController;
 
 static void uiTick(lv_timer_t *timer) {
     (void)timer;
-    controller.tick();
+    gController.tick();
 }
 
 int main(void) {
@@ -20,15 +21,23 @@ int main(void) {
     lv_sdl_keyboard_create();
     lv_sdl_mousewheel_create();
 
-    ui.init(disp);
-    controller.init(&ui);
+    // 中文字体：FreeType 渲染
+    lv_freetype_init(512);
+    const lv_font_t *cjkNormal = ui::loadCjkFont(16);
+    const lv_font_t *cjkLarge = ui::loadCjkFont(20);
+    lv_theme_default_init(disp, lv_palette_main(LV_PALETTE_BLUE),
+                          lv_palette_main(LV_PALETTE_RED), true,
+                          cjkNormal ? cjkNormal : LV_FONT_DEFAULT);
 
-    ui.onCameraSelect = [](int i) { controller.selectCamera(i); };
-    ui.onStartPreview = []() { controller.startPreview(); };
-    ui.onStopPreview = []() { controller.stopPreview(); };
-    ui.onRecordToggle = []() { controller.toggleRecording(); };
-    ui.onTransfer = []() { controller.transferSelectedFile(); };
-    ui.onFileSelect = [](int row) { controller.selectFile(row); };
+    gUi.init(disp, cjkLarge ? cjkLarge : LV_FONT_DEFAULT);
+    gController.init(&gUi);
+
+    gUi.onCameraSelect = [](int i) { gController.selectCamera(i); };
+    gUi.onStartPreview = []() { gController.startPreview(); };
+    gUi.onStopPreview = []() { gController.stopPreview(); };
+    gUi.onRecordToggle = []() { gController.toggleRecording(); };
+    gUi.onTransfer = []() { gController.transferSelectedFile(); };
+    gUi.onFileSelect = [](int row) { gController.selectFile(row); };
 
     lv_timer_create(uiTick, 33, nullptr);  // ~30fps 的 UI 刷新
 

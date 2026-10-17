@@ -1,7 +1,6 @@
 #include "ui/ui.h"
 
 #include <cstdio>
-#include <cstdlib>
 
 namespace {
 
@@ -13,7 +12,8 @@ constexpr int kPanelW = 280;
 void onCameraDropdown(lv_event_t *e) {
     auto *ui = static_cast<Ui *>(lv_event_get_user_data(e));
     if (ui->onCameraSelect) {
-        ui->onCameraSelect(static_cast<int>(lv_dropdown_get_selected(static_cast<lv_obj_t *>(lv_event_get_target(e)))));
+        ui->onCameraSelect(static_cast<int>(lv_dropdown_get_selected(
+            static_cast<lv_obj_t *>(lv_event_get_target(e)))));
     }
 }
 
@@ -26,13 +26,12 @@ void onFileTable(lv_event_t *e) {
 
 }  // namespace
 
-void Ui::init(lv_display_t *disp) {
+void Ui::init(lv_display_t *disp, const lv_font_t *fontLarge) {
     (void)disp;
+    fontLarge_ = fontLarge;
     screen_ = lv_screen_active();
     lv_obj_set_style_bg_color(screen_, lv_color_hex(0x16161e), 0);
     lv_obj_set_style_pad_all(screen_, 0, 0);
-
-    lv_obj_set_style_text_font(screen_, &lv_font_montserrat_14, 0);
 
     // ---- 顶栏 ----
     lv_obj_t *top = lv_obj_create(screen_);
@@ -44,12 +43,12 @@ void Ui::init(lv_display_t *disp) {
     lv_obj_set_style_pad_all(top, 0, 0);
 
     lv_obj_t *title = lv_label_create(top);
-    lv_label_set_text(title, "Camera Control");
-    lv_obj_set_style_text_font(title, &lv_font_montserrat_20, 0);
+    lv_label_set_text(title, "相机控制");
+    if (fontLarge_) lv_obj_set_style_text_font(title, fontLarge_, 0);
     lv_obj_align(title, LV_ALIGN_LEFT_MID, 12, 0);
 
     statusLabel_ = lv_label_create(top);
-    lv_label_set_text(statusLabel_, "Ready");
+    lv_label_set_text(statusLabel_, "就绪");
     lv_obj_align(statusLabel_, LV_ALIGN_RIGHT_MID, -12, 0);
 
     // ---- 左侧控制面板 ----
@@ -63,7 +62,7 @@ void Ui::init(lv_display_t *disp) {
 
     int y = 6;
     lv_obj_t *camLabel = lv_label_create(left);
-    lv_label_set_text(camLabel, "Camera");
+    lv_label_set_text(camLabel, "摄像头");
     lv_obj_align(camLabel, LV_ALIGN_TOP_LEFT, 0, y);
 
     cameraDropdown_ = lv_dropdown_create(left);
@@ -76,7 +75,7 @@ void Ui::init(lv_display_t *disp) {
     lv_obj_set_size(previewBtn_, kPanelW - 20, 44);
     lv_obj_align(previewBtn_, LV_ALIGN_TOP_LEFT, 0, y);
     lv_obj_t *p1 = lv_label_create(previewBtn_);
-    lv_label_set_text(p1, "Start Preview");
+    lv_label_set_text(p1, "开始预览");
     lv_obj_center(p1);
     lv_obj_add_event_cb(previewBtn_, [](lv_event_t *e) {
         auto *ui = static_cast<Ui *>(lv_event_get_user_data(e));
@@ -88,7 +87,7 @@ void Ui::init(lv_display_t *disp) {
     lv_obj_set_size(stopP, kPanelW - 20, 44);
     lv_obj_align(stopP, LV_ALIGN_TOP_LEFT, 0, y);
     lv_obj_t *p2 = lv_label_create(stopP);
-    lv_label_set_text(p2, "Stop Preview");
+    lv_label_set_text(p2, "停止预览");
     lv_obj_center(p2);
     lv_obj_add_event_cb(stopP, [](lv_event_t *e) {
         auto *ui = static_cast<Ui *>(lv_event_get_user_data(e));
@@ -100,7 +99,7 @@ void Ui::init(lv_display_t *disp) {
     lv_obj_set_size(recordBtn_, kPanelW - 20, 44);
     lv_obj_align(recordBtn_, LV_ALIGN_TOP_LEFT, 0, y);
     lv_obj_t *r1 = lv_label_create(recordBtn_);
-    lv_label_set_text(r1, "Start Recording");
+    lv_label_set_text(r1, "开始录像");
     lv_obj_center(r1);
     lv_obj_add_event_cb(recordBtn_, [](lv_event_t *e) {
         auto *ui = static_cast<Ui *>(lv_event_get_user_data(e));
@@ -109,17 +108,17 @@ void Ui::init(lv_display_t *disp) {
 
     y += 64;
     recordStateLabel_ = lv_label_create(left);
-    lv_label_set_text(recordStateLabel_, "Not recording");
+    lv_label_set_text(recordStateLabel_, "未录像");
     lv_obj_set_style_text_color(recordStateLabel_, lv_color_hex(0xaaaaaa), 0);
     lv_obj_align(recordStateLabel_, LV_ALIGN_TOP_LEFT, 0, y);
 
     y += 30;
     lv_obj_t *dirTitle = lv_label_create(left);
-    lv_label_set_text(dirTitle, "Save dir:");
+    lv_label_set_text(dirTitle, "保存目录:");
     lv_obj_align(dirTitle, LV_ALIGN_TOP_LEFT, 0, y);
 
     saveDirLabel_ = lv_label_create(left);
-    lv_label_set_text(saveDirLabel_, "N/A");
+    lv_label_set_text(saveDirLabel_, "未设置");
     lv_label_set_long_mode(saveDirLabel_, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(saveDirLabel_, kPanelW - 20);
     lv_obj_align(saveDirLabel_, LV_ALIGN_TOP_LEFT, 0, y + 20);
@@ -138,7 +137,7 @@ void Ui::init(lv_display_t *disp) {
     lv_obj_add_flag(previewImage_, LV_OBJ_FLAG_HIDDEN);
 
     previewInfo_ = lv_label_create(center);
-    lv_label_set_text(previewInfo_, "No preview");
+    lv_label_set_text(previewInfo_, "无预览");
     lv_obj_set_style_text_color(previewInfo_, lv_color_hex(0x666666), 0);
     lv_obj_center(previewInfo_);
 
@@ -152,8 +151,8 @@ void Ui::init(lv_display_t *disp) {
     lv_obj_set_style_pad_all(right, 10, 0);
 
     lv_obj_t *fileTitle = lv_label_create(right);
-    lv_label_set_text(fileTitle, "Recordings");
-    lv_obj_set_style_text_font(fileTitle, &lv_font_montserrat_16, 0);
+    lv_label_set_text(fileTitle, "录像文件");
+    if (fontLarge_) lv_obj_set_style_text_font(fileTitle, fontLarge_, 0);
     lv_obj_align(fileTitle, LV_ALIGN_TOP_LEFT, 0, 2);
 
     fileTable_ = lv_table_create(right);
@@ -164,7 +163,7 @@ void Ui::init(lv_display_t *disp) {
     lv_table_set_col_width(fileTable_, 1, 62);
     lv_table_set_col_width(fileTable_, 2, 58);
     lv_table_set_row_cnt(fileTable_, 1);
-    lv_table_set_cell_value(fileTable_, 0, 0, "No files");
+    lv_table_set_cell_value(fileTable_, 0, 0, "无文件");
     lv_table_set_cell_value(fileTable_, 0, 1, "");
     lv_table_set_cell_value(fileTable_, 0, 2, "");
     lv_obj_add_event_cb(fileTable_, onFileTable, LV_EVENT_VALUE_CHANGED, this);
@@ -173,7 +172,7 @@ void Ui::init(lv_display_t *disp) {
     lv_obj_set_size(transferBtn_, kPanelW - 20, 44);
     lv_obj_align(transferBtn_, LV_ALIGN_TOP_LEFT, 0, 344);
     lv_obj_t *t1 = lv_label_create(transferBtn_);
-    lv_label_set_text(t1, "Transfer");
+    lv_label_set_text(t1, "传输");
     lv_obj_center(t1);
     lv_obj_add_event_cb(transferBtn_, [](lv_event_t *e) {
         auto *ui = static_cast<Ui *>(lv_event_get_user_data(e));
@@ -187,7 +186,7 @@ void Ui::init(lv_display_t *disp) {
     lv_bar_set_value(transferBar_, 0, LV_ANIM_OFF);
 
     transferStatus_ = lv_label_create(right);
-    lv_label_set_text(transferStatus_, "No transfer");
+    lv_label_set_text(transferStatus_, "未传输");
     lv_obj_set_style_text_color(transferStatus_, lv_color_hex(0x888888), 0);
     lv_label_set_long_mode(transferStatus_, LV_LABEL_LONG_WRAP);
     lv_obj_set_width(transferStatus_, kPanelW - 20);
@@ -219,11 +218,11 @@ void Ui::setRecordState(bool recording, uint32_t seconds) {
     if (!recordStateLabel_) return;
     char buf[64];
     if (recording) {
-        std::snprintf(buf, sizeof(buf), "REC  %02u:%02u", seconds / 60, seconds % 60);
+        std::snprintf(buf, sizeof(buf), "录像中 %02u:%02u", seconds / 60, seconds % 60);
         lv_label_set_text(recordStateLabel_, buf);
         lv_obj_set_style_text_color(recordStateLabel_, lv_color_hex(0xff5555), 0);
     } else {
-        lv_label_set_text(recordStateLabel_, "Not recording");
+        lv_label_set_text(recordStateLabel_, "未录像");
         lv_obj_set_style_text_color(recordStateLabel_, lv_color_hex(0xaaaaaa), 0);
     }
 }
@@ -240,7 +239,7 @@ void Ui::setFileTable(const std::vector<std::vector<std::string>> &rows) {
     if (!fileTable_) return;
     if (rows.empty()) {
         lv_table_set_row_cnt(fileTable_, 1);
-        lv_table_set_cell_value(fileTable_, 0, 0, "No files");
+        lv_table_set_cell_value(fileTable_, 0, 0, "无文件");
         lv_table_set_cell_value(fileTable_, 0, 1, "");
         lv_table_set_cell_value(fileTable_, 0, 2, "");
         selectedFile_ = -1;
@@ -259,10 +258,6 @@ void Ui::setFileTable(const std::vector<std::vector<std::string>> &rows) {
 void Ui::setFileTableSelection(int row) {
     if (!fileTable_) return;
     selectedFile_ = row;
-    if (row >= 0) {
-        lv_table_set_cell_value(fileTable_, static_cast<uint32_t>(row), 0,
-                                lv_table_get_cell_value(fileTable_, static_cast<uint32_t>(row), 0));
-    }
 }
 
 void Ui::setTransferProgress(int percent) {
@@ -307,7 +302,7 @@ void Ui::setPreviewFrame(const uint8_t *rgb565, uint32_t w, uint32_t h) {
 
 void Ui::clearPreview() {
     if (previewImage_) lv_obj_add_flag(previewImage_, LV_OBJ_FLAG_HIDDEN);
-    if (previewInfo_) lv_label_set_text(previewInfo_, "No preview");
+    if (previewInfo_) lv_label_set_text(previewInfo_, "无预览");
     imageValid_ = false;
 }
 
@@ -321,7 +316,7 @@ void Ui::setTransferEnabled(bool enabled) {
 void Ui::setRecordButtons(bool recording) {
     if (recordBtn_) {
         lv_obj_t *label = lv_obj_get_child(recordBtn_, 0);
-        lv_label_set_text(label, recording ? "Stop Recording" : "Start Recording");
+        lv_label_set_text(label, recording ? "停止录像" : "开始录像");
     }
 }
 

@@ -16,12 +16,13 @@
 - GCC/G++ 与 CMake（>= 3.16）
 - SDL2 开发库：`libsdl2-dev`
 - libjpeg-turbo 开发库：`libjpeg-turbo8-dev`
+- FreeType 开发库：`libfreetype6-dev`（用于中文字体渲染）
 
 安装依赖：
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y build-essential cmake pkg-config libsdl2-dev libjpeg-turbo8-dev
+sudo apt-get install -y build-essential cmake pkg-config libsdl2-dev libjpeg-turbo8-dev libfreetype6-dev
 ```
 
 ## 构建
@@ -88,4 +89,4 @@ g++ -std=c++17 -O2 -Iinclude -Isrc tests/test_record.cpp \
 
 - 录像与传输默认使用相对目录 `recordings/`、`received/`，如需修改可在 `src/app/app_controller.cpp` 的构造函数中调整。
 - 当前仅实现 PC 本机文件传输；板端网络传输接口将在后续阶段补充。
-- 界面文案为英文，便于使用 LVGL 内置字体；如需中文界面，需额外添加 CJK 字体。
+- 界面为中文，使用 FreeType 渲染 CJK 字体；字体随工程打包于 `assets/fonts/`，缺失时自动回退到系统字体。

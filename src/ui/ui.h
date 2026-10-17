@@ -13,7 +13,7 @@ public:
     Ui() = default;
     ~Ui() = default;
 
-    void init(lv_display_t *disp);
+    void init(lv_display_t *disp, const lv_font_t *fontLarge);
 
     // 相机与文件选择回调
     std::function<void(int)> onCameraSelect;
@@ -45,6 +45,7 @@ public:
     void setRecordButtons(bool recording);
 
 private:
+    const lv_font_t *fontLarge_ = nullptr;
     lv_obj_t *screen_ = nullptr;
     lv_obj_t *cameraDropdown_ = nullptr;
     lv_obj_t *previewBtn_ = nullptr;

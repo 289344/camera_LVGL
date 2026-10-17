@@ -56,6 +56,7 @@ FileTransferService::Result FileTransferService::takeResult() {
     std::lock_guard<std::mutex> lk(resMutex_);
     Result r = result_;
     result_ = {};
+    finished_.store(false);  // 清除完成标志，避免重复取到空结果
     return r;
 }
 
