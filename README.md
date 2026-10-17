@@ -114,7 +114,7 @@ adb shell mkdir -p /root/camera_lvgl/assets/fonts
 adb push build_board/camera_lvgl /root/camera_lvgl/camera_lvgl
 adb push assets/fonts/DroidSansFallbackFull.ttf /root/camera_lvgl/assets/fonts/
 adb shell 'chmod +x /root/camera_lvgl/camera_lvgl'
-adb shell 'cd /root/camera_lvgl && nohup ./camera_lvgl > /tmp/camera_lvgl.log 2>&1 &'
+adb shell 'cd /root/camera_lvgl && setsid nohup ./camera_lvgl > /tmp/camera_lvgl.log 2>&1 < /dev/null &'
 ```
 
 板端录像文件保存在 `/root/camera_lvgl/recordings/`。点击界面中的 **Transfer** 后，板子会通过 TCP 把文件发送到 PC 的 `received/` 目录。
