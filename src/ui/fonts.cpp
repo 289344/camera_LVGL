@@ -1,7 +1,6 @@
 #include "ui/fonts.h"
 
-#include <filesystem>
-#include <system_error>
+#include "fs_compat.h"
 
 namespace ui {
 
@@ -16,8 +15,7 @@ const char *kCandidates[] = {
 
 lv_font_t *loadCjkFont(uint32_t size) {
     for (const char *path : kCandidates) {
-        std::error_code ec;
-        if (!std::filesystem::exists(path, ec)) continue;
+        if (!fscompat::exists(path)) continue;
         lv_font_t *font = lv_freetype_font_create(
             path, LV_FREETYPE_FONT_RENDER_MODE_BITMAP, size, LV_FREETYPE_FONT_STYLE_NORMAL);
         if (font) return font;

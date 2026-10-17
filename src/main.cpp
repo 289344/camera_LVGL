@@ -15,11 +15,19 @@ static void uiTick(lv_timer_t *timer) {
 int main(void) {
     lv_init();
 
+#ifdef CAMERA_LVGL_BOARD
+    lv_display_t *disp = lv_linux_fbdev_create();
+    if (!disp) return 1;
+    if (lv_linux_fbdev_set_file(disp, "/dev/fb0") != LV_RESULT_OK) return 1;
+    lv_indev_t *touch = lv_evdev_create(LV_INDEV_TYPE_POINTER, "/dev/input/event1");
+    if (touch) lv_indev_set_display(touch, disp);
+#else
     lv_display_t *disp = lv_sdl_window_create(1024, 600);
     if (!disp) return 1;
     lv_sdl_mouse_create();
     lv_sdl_keyboard_create();
     lv_sdl_mousewheel_create();
+#endif
 
     // 中文字体：FreeType 渲染
     // 所选 CJK 字体（如 Droid Sans Fallback）可能不含拉丁/数字字形，

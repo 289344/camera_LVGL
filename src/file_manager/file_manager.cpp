@@ -1,13 +1,12 @@
 #include "file_manager/file_manager.h"
 
 #include <algorithm>
-#include <chrono>
-#include <ctime>
 #include <cstdio>
-#include <filesystem>
-#include <system_error>
+#include <cstring>
+#include <dirent.h>
+#include <sys/stat.h>
 
-namespace fs = std::filesystem;
+#include "fs_compat.h"
 
 namespace filemanager {
 
@@ -30,38 +29,32 @@ std::string FileManager::formatTime(const std::string &isoTime) {
     return isoTime;
 }
 
-static std::string lastWriteTime(const fs::path &p) {
-    std::error_code ec;
-    auto ftime = fs::last_write_time(p, ec);
-    if (ec) return "";
-    auto sctp = std::chrono::time_point_cast<std::chrono::system_clock::duration>(
-        ftime - fs::file_time_type::clock::now() + std::chrono::system_clock::now());
-    std::time_t t = std::chrono::system_clock::to_time_t(sctp);
-    std::tm tm{};
-    localtime_r(&t, &tm);
-    char buf[64];
-    std::snprintf(buf, sizeof(buf), "%04d-%02d-%02d %02d:%02d:%02d",
-                  tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
-                  tm.tm_hour, tm.tm_min, tm.tm_sec);
-    return std::string(buf);
-}
-
 std::vector<FileInfo> FileManager::list(const std::string &dir) {
     std::vector<FileInfo> result;
-    std::error_code ec;
-    if (!fs::is_directory(dir, ec)) return result;
+    if (!fscompat::isDirectory(dir)) return result;
 
-    for (const auto &entry : fs::directory_iterator(dir, ec)) {
-        if (ec) break;
-        if (!entry.is_regular_file(ec)) continue;
-        if (entry.path().extension() != ".avi") continue;
+    DIR *d = ::opendir(dir.c_str());
+    if (!d) return result;
+
+    while (struct dirent *entry = ::readdir(d)) {
+        const char *name = entry->d_name;
+        if (std::strcmp(name, ".") == 0 || std::strcmp(name, "..") == 0) continue;
+
+        size_t len = std::strlen(name);
+        if (len < 4 || std::strcmp(name + len - 4, ".avi") != 0) continue;
+
+        std::string full = dir + "/" + name;
+        struct stat st;
+        if (::stat(full.c_str(), &st) != 0 || !S_ISREG(st.st_mode)) continue;
+
         FileInfo info;
-        info.name = entry.path().filename().string();
-        info.path = entry.path().string();
-        info.size = entry.file_size(ec);
-        info.created = lastWriteTime(entry.path());
-        result.push_back(std::move(info));
+        info.name = name;
+        info.path = full;
+        info.size = static_cast<uint64_t>(st.st_size);
+        info.created = fscompat::lastWriteTime(full);
+        result.push_back(info);
     }
+    ::closedir(d);
 
     std::sort(result.begin(), result.end(), [](const FileInfo &a, const FileInfo &b) {
         return a.created > b.created;

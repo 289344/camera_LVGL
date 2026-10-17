@@ -12,6 +12,12 @@
 namespace {
 constexpr uint32_t kMJPG = v4l2_fourcc('M', 'J', 'P', 'G');
 constexpr uint32_t kYUYV = v4l2_fourcc('Y', 'U', 'Y', 'V');
+
+#ifdef CAMERA_LVGL_BOARD
+// 板端传输目标：PC 接收服务
+constexpr const char *kTransferHost = "10.151.16.82";
+constexpr uint16_t kTransferPort = 9000;
+#endif
 }  // namespace
 
 AppController::AppController() {
@@ -308,7 +314,12 @@ void AppController::transferSelectedFile() {
     }
 
     const std::string &src = files_[selectedFile_].path;
-    if (!transfer_.start(src, receivedDir_)) {
+#ifdef CAMERA_LVGL_BOARD
+    const bool started = transfer_.startTcp(src, kTransferHost, kTransferPort);
+#else
+    const bool started = transfer_.start(src, receivedDir_);
+#endif
+    if (!started) {
         auto r = transfer_.takeResult();
         ui_->setTransferStatus("失败: " + r.error, 0xff5555);
         ui_->setStatusText("传输失败", 0xff5555);

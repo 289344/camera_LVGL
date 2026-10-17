@@ -90,3 +90,39 @@ g++ -std=c++17 -O2 -Iinclude -Isrc tests/test_record.cpp \
 - 录像与传输默认使用相对目录 `recordings/`、`received/`，如需修改可在 `src/app/app_controller.cpp` 的构造函数中调整。
 - 当前仅实现 PC 本机文件传输；板端网络传输接口将在后续阶段补充。
 - 界面为中文，使用 FreeType 渲染 CJK 字体；字体随工程打包于 `assets/fonts/`，缺失时自动回退到系统字体。
+
+## 板端交叉编译（i.MX6ULL / Buildroot）
+
+目标板：100ask_IMX6ULL（Buildroot 2020.02，armv7l，1024x600 RGB LCD，goodix 触摸屏）。
+
+前置条件：
+- 主机已安装 ADB，且 `adb devices` 能看到板子。
+- 主机存在交叉工具链：`/usr/local/arm/gcc-linaro-4.9.4-2017.01-x86_64_arm-linux-gnueabihf/`。
+
+编译：
+
+```bash
+./scripts/build_board.sh
+```
+
+产物：`build_board/camera_lvgl`。
+
+部署到板端并运行：
+
+```bash
+adb shell mkdir -p /root/camera_lvgl/assets/fonts
+adb push build_board/camera_lvgl /root/camera_lvgl/camera_lvgl
+adb push assets/fonts/DroidSansFallbackFull.ttf /root/camera_lvgl/assets/fonts/
+adb shell 'chmod +x /root/camera_lvgl/camera_lvgl'
+adb shell 'cd /root/camera_lvgl && nohup ./camera_lvgl > /tmp/camera_lvgl.log 2>&1 &'
+```
+
+板端录像文件保存在 `/root/camera_lvgl/recordings/`。点击界面中的 **Transfer** 后，板子会通过 TCP 把文件发送到 PC 的 `received/` 目录。
+
+PC 端接收服务：
+
+```bash
+./tools/pc_receiver.py
+```
+
+默认监听 `0.0.0.0:9000`，接收目录为项目根目录 `received/`。传输目标 PC 地址当前编译在 `src/app/app_controller.cpp` 中，默认 `10.151.16.82:9000`，如需修改请修改后再重新执行板端编译。

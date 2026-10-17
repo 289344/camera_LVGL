@@ -3,8 +3,7 @@
 #include <chrono>
 #include <cstdio>
 #include <ctime>
-#include <filesystem>
-#include <system_error>
+#include "fs_compat.h"
 
 namespace recording {
 
@@ -28,9 +27,7 @@ bool RecordingService::start(const Config &cfg) {
     stop();
     lastError_.clear();
 
-    std::error_code ec;
-    std::filesystem::create_directories(cfg.dir, ec);
-    if (ec) {
+    if (!fscompat::createDirectories(cfg.dir)) {
         lastError_ = "创建目录失败: " + cfg.dir;
         return false;
     }

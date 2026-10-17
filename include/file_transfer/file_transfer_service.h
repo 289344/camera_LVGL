@@ -12,6 +12,10 @@ namespace transfer {
 class FileTransferService {
 public:
     struct Result {
+        Result() = default;
+        Result(bool s, std::string e, std::string d)
+            : success(s), error(std::move(e)), dstPath(std::move(d)) {}
+
         bool success = false;
         std::string error;
         std::string dstPath;
@@ -24,6 +28,7 @@ public:
     FileTransferService &operator=(const FileTransferService &) = delete;
 
     bool start(const std::string &srcPath, const std::string &dstDir);
+    bool startTcp(const std::string &srcPath, const std::string &host, uint16_t port);
     void cancel();
 
     bool isTransferring() const { return transferring_.load(); }
@@ -33,6 +38,7 @@ public:
 
 private:
     void worker(const std::string &srcPath, const std::string &dstPath);
+    void tcpWorker(const std::string &srcPath, const std::string &host, uint16_t port);
 
     std::thread thread_;
     std::atomic<bool> transferring_{false};
