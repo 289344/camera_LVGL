@@ -3,6 +3,7 @@
 #include "ui/ui.h"
 #include "ui/fonts.h"
 #include "app/app_controller.h"
+#include "board_display.h"
 
 static Ui gUi;
 static AppController gController;
@@ -16,9 +17,8 @@ int main(void) {
     lv_init();
 
 #ifdef CAMERA_LVGL_BOARD
-    lv_display_t *disp = lv_linux_fbdev_create();
+    lv_display_t *disp = board::createDisplay();
     if (!disp) return 1;
-    if (lv_linux_fbdev_set_file(disp, "/dev/fb0") != LV_RESULT_OK) return 1;
     lv_indev_t *touch = lv_evdev_create(LV_INDEV_TYPE_POINTER, "/dev/input/event1");
     if (touch) lv_indev_set_display(touch, disp);
 #else
