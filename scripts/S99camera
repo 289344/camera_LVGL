@@ -1,0 +1,51 @@
+#!/bin/sh
+
+DAEMON="/root/camera_lvgl/camera_lvgl"
+DAEMON_DIR="/root/camera_lvgl"
+PIDFILE="/var/run/camera_lvgl.pid"
+
+start() {
+    printf 'Starting camera_lvgl: '
+    # psplash 会占用 /dev/fb0 并可能再次弹出旧画面，先关闭
+    kill $(pidof psplash) 2>/dev/null || true
+
+    if [ ! -x "$DAEMON" ]; then
+        echo "FAIL (missing $DAEMON)"
+        return 1
+    fi
+
+    start-stop-daemon -b -m -S -q -p "$PIDFILE" -d "$DAEMON_DIR" -x "$DAEMON"
+    if [ $? -eq 0 ]; then
+        echo "OK"
+    else
+        echo "FAIL"
+        return 1
+    fi
+}
+
+stop() {
+    printf 'Stopping camera_lvgl: '
+    start-stop-daemon -K -q -p "$PIDFILE" 2>/dev/null || true
+    rm -f "$PIDFILE"
+    kill $(pidof camera_lvgl) 2>/dev/null || true
+    echo "OK"
+}
+
+case "$1" in
+    start)
+        start
+        ;;
+    stop)
+        stop
+        ;;
+    restart)
+        stop
+        sleep 1
+        start
+        ;;
+    *)
+        echo "Usage: $0 {start|stop|restart}"
+        exit 1
+esac
+
+exit $?

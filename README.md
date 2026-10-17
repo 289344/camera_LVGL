@@ -126,3 +126,29 @@ PC 端接收服务：
 ```
 
 默认监听 `0.0.0.0:9000`，接收目录为项目根目录 `received/`。传输目标 PC 地址当前编译在 `src/app/app_controller.cpp` 中，默认 `10.151.16.82:9000`，如需修改请修改后再重新执行板端编译。
+
+## 板端开机自启动
+
+板端 init 脚本位于 `/etc/init.d/S99camera`，仓库内备份为 `scripts/S99camera`。
+
+安装/更新：
+
+```bash
+adb push scripts/S99camera /etc/init.d/S99camera
+adb shell 'chmod +x /etc/init.d/S99camera'
+```
+
+禁用原来的 LED/温湿度程序：
+
+```bash
+adb shell 'mv /etc/init.d/S99myqt /etc/init.d/K99myqt'
+adb shell 'kill $(pidof myled) 2>/dev/null || true'
+```
+
+手动启动/停止相机程序：
+
+```bash
+adb shell '/etc/init.d/S99camera start'
+adb shell '/etc/init.d/S99camera stop'
+adb shell '/etc/init.d/S99camera restart'
+```
