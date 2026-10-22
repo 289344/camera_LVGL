@@ -2,6 +2,7 @@
 
 #include <atomic>
 #include <condition_variable>
+#include <cstdio>
 #include <cstdint>
 #include <deque>
 #include <mutex>
@@ -9,11 +10,9 @@
 #include <thread>
 #include <vector>
 
-#include "recording/avi_muxer.h"
-
 namespace recording {
 
-/** 后台录像服务：将 MJPEG 帧封装为 AVI 文件。 */
+/** 后台录像服务：将 MJPEG 帧和 ALSA 麦克风音频封装为 MP4。 */
 class RecordingService {
 public:
     struct Config {
@@ -22,6 +21,10 @@ public:
         uint32_t height = 480;
         uint32_t fpsNum = 30;
         uint32_t fpsDen = 1;
+        std::string audioDevice = "plughw:1,0";
+        uint32_t audioChannels = 1;
+        uint32_t audioSampleRate = 16000;
+        uint32_t audioBitrate = 64000;
     };
 
     RecordingService() = default;
@@ -36,7 +39,7 @@ public:
 
     bool isRecording() const { return recording_.load(); }
     const std::string &filePath() const { return filePath_; }
-    std::string lastError() const { return lastError_; }
+    std::string lastError() const;
     uint32_t frameCount() const { return frameCount_.load(); }
     uint64_t bytesWritten() const { return bytesWritten_.load(); }
     uint32_t droppedFrames() const { return dropped_.load(); }
@@ -44,12 +47,15 @@ public:
 
 private:
     void writerLoop();
+    void waitForFfmpeg();
+    void setError(const std::string &error);
     static std::string generateFilename();
 
-    AviMuxer muxer_;
     std::thread thread_;
     std::atomic<bool> recording_{false};
     std::atomic<bool> stopRequested_{false};
+    std::FILE *ffmpegIn_ = nullptr;
+    int ffmpegPid_ = -1;
 
     std::mutex mtx_;
     std::condition_variable cv_;
@@ -63,6 +69,7 @@ private:
     uint32_t fpsDen_ = 1;
 
     std::string filePath_;
+    mutable std::mutex errorMutex_;
     std::string lastError_;
 };
 

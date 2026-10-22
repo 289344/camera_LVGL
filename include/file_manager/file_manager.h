@@ -15,7 +15,7 @@ struct FileInfo {
 
 class FileManager {
 public:
-    /** 扫描目录下扩展名为 .avi 的文件，按创建时间倒序返回。 */
+    /** 扫描目录下扩展名为 .mp4/.avi 的文件，按创建时间倒序返回。 */
     static std::vector<FileInfo> list(const std::string &dir);
 
     static std::string formatSize(uint64_t size);

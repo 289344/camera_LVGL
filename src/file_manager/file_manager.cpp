@@ -41,7 +41,9 @@ std::vector<FileInfo> FileManager::list(const std::string &dir) {
         if (std::strcmp(name, ".") == 0 || std::strcmp(name, "..") == 0) continue;
 
         size_t len = std::strlen(name);
-        if (len < 4 || std::strcmp(name + len - 4, ".avi") != 0) continue;
+        const bool isMp4 = len >= 4 && std::strcmp(name + len - 4, ".mp4") == 0;
+        const bool isAvi = len >= 4 && std::strcmp(name + len - 4, ".avi") == 0;
+        if (!isMp4 && !isAvi) continue;
 
         std::string full = dir + "/" + name;
         struct stat st;

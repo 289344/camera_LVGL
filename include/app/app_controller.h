@@ -85,6 +85,7 @@ private:
     std::string recordingsDir_;
     std::string receivedDir_;
     std::string transferHost_;
+    std::string audioDevice_;
 
     int playbackPid_ = -1;
 

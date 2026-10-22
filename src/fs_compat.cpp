@@ -24,23 +24,22 @@ bool createDirectories(const std::string &path) {
     if (path.empty()) return false;
 
     std::string cur;
-    size_t i = 0;
+    size_t pos = 0;
     if (path[0] == '/') {
         cur = "/";
-        i = 1;
+        pos = 1;
     }
 
-    while (i <= path.size()) {
-        size_t j = path.find('/', i);
-        if (j == std::string::npos) {
-            if (i < path.size()) cur += path.substr(i);
-            i = path.size() + 1;
-        } else {
-            cur += path.substr(i, j - i);
-            i = j + 1;
-        }
+    while (pos < path.size()) {
+        while (pos < path.size() && path[pos] == '/') ++pos;
+        if (pos >= path.size()) break;
 
-        if (cur.empty() || cur == "/") continue;
+        const size_t slash = path.find('/', pos);
+        const size_t end = slash == std::string::npos ? path.size() : slash;
+        const std::string component = path.substr(pos, end - pos);
+
+        if (!cur.empty() && cur.back() != '/') cur += '/';
+        cur += component;
 
         struct stat st;
         if (::stat(cur.c_str(), &st) != 0) {
@@ -50,6 +49,8 @@ bool createDirectories(const std::string &path) {
         } else if (!S_ISDIR(st.st_mode)) {
             return false;
         }
+
+        pos = end;
     }
 
     return true;

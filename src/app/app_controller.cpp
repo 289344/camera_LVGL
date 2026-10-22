@@ -8,6 +8,7 @@
 #include <fcntl.h>
 #include <fstream>
 #include <linux/videodev2.h>
+#include <sstream>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -45,6 +46,41 @@ std::string loadTransferHost() {
     return "127.0.0.1";
 #endif
 }
+
+std::string loadAudioDevice() {
+#ifdef CAMERA_LVGL_BOARD
+    const char *envDevice = std::getenv("CAMERA_AUDIO_DEVICE");
+    if (envDevice && *envDevice) return envDevice;
+
+    std::ifstream cfg("/root/camera_lvgl/audio_device.txt");
+    std::string device;
+    if (cfg && std::getline(cfg, device)) {
+        const size_t first = device.find_first_not_of(" \t\r\n");
+        const size_t last = device.find_last_not_of(" \t\r\n");
+        if (first != std::string::npos) {
+            return device.substr(first, last - first + 1);
+        }
+    }
+
+    // 优先选择新增的 USB 麦克风；未插 USB 时退回板载 WM8960。
+    std::ifstream cards("/proc/asound/cards");
+    std::string line;
+    while (cards && std::getline(cards, line)) {
+        if (line.find("USB-Audio") == std::string::npos &&
+            line.find("UACDemo") == std::string::npos) {
+            continue;
+        }
+        std::istringstream in(line);
+        int card = -1;
+        if (in >> card && card >= 0) {
+            return "plughw:" + std::to_string(card) + ",0";
+        }
+    }
+    return "plughw:0,0";
+#else
+    return "default";
+#endif
+}
 }  // namespace
 
 AppController::AppController() {
@@ -52,6 +88,7 @@ AppController::AppController() {
     recordingsDir_ = "recordings";
     receivedDir_ = "received";
     transferHost_ = loadTransferHost();
+    audioDevice_ = loadAudioDevice();
 }
 
 AppController::~AppController() {
@@ -237,8 +274,13 @@ void AppController::tick() {
     if (!err.empty()) ui_->setStatusText(err, 0xff5555);
 
     if (recording_.load()) {
-        uint32_t secs = static_cast<uint32_t>(recorder_.durationSec());
-        ui_->setRecordState(true, secs);
+        const std::string recError = recorder_.lastError();
+        if (!recError.empty()) {
+            stopRecording();
+        } else {
+            uint32_t secs = static_cast<uint32_t>(recorder_.durationSec());
+            ui_->setRecordState(true, secs);
+        }
     }
 
     if (transfer_.isTransferring() || transfer_.finished()) {
@@ -281,6 +323,10 @@ void AppController::startRecording() {
     cfg.height = previewH_;
     cfg.fpsNum = 30;
     cfg.fpsDen = 1;
+    cfg.audioDevice = audioDevice_;
+    cfg.audioChannels = 1;
+    cfg.audioSampleRate = 16000;
+    cfg.audioBitrate = 64000;
 
     if (!recorder_.start(cfg)) {
         ui_->setStatusText("录像失败: " + recorder_.lastError(), 0xff5555);
@@ -289,7 +335,7 @@ void AppController::startRecording() {
     recording_.store(true);
     ui_->setRecordButtons(true);
     ui_->setRecordState(true, 0);
-    ui_->setStatusText("录像已开始", 0x66cc66);
+    ui_->setStatusText("录像已开始（视频 + 麦克风）", 0x66cc66);
 }
 
 void AppController::stopRecording() {
@@ -385,12 +431,17 @@ void AppController::playSelectedFile() {
             if (logFd > STDERR_FILENO) ::close(logFd);
         }
 
-        const std::string source = "location=" + path;
-        ::execl("/usr/bin/gst-launch-1.0", "gst-launch-1.0", "-q", "-e",
-                "filesrc", source.c_str(), "!", "decodebin", "!",
-                "videoconvert", "!", "videoscale", "!",
-                "video/x-raw,width=1024,height=600", "!",
-                "fbdevsink", "device=/dev/fb0", static_cast<char *>(nullptr));
+        // 640x480 视频用黑边居中到 1024x600，避免软件放大消耗有限的 CPU。
+        const std::string uri = "uri=file://" + path;
+        const std::string videoSink =
+            "videoconvert ! videobox left=-192 right=-192 top=-60 bottom=-60 fill=black ! "
+            "video/x-raw,width=1024,height=600 ! fbdevsink device=/dev/fb0";
+        const std::string audioSink = "alsasink device=" + audioDevice_;
+        const std::string videoSinkOption = "video-sink=" + videoSink;
+        const std::string audioSinkOption = "audio-sink=" + audioSink;
+        ::execl("/usr/bin/gst-launch-1.0", "gst-launch-1.0", "-q",
+                "playbin", uri.c_str(), videoSinkOption.c_str(),
+                audioSinkOption.c_str(), static_cast<char *>(nullptr));
         ::_exit(127);
     }
 #else

@@ -1,4 +1,4 @@
-// 无 GUI 的完整业务流程测试：录像 -> 文件列表 -> 本机传输
+// 无 GUI 的完整业务流程测试：音视频录像 -> 文件列表 -> 本机传输
 #include <chrono>
 #include <cstdio>
 #include <filesystem>
@@ -18,13 +18,14 @@ int main() {
 
     // 1. 录像 1 秒
     camera::CameraDevice cam;
-    if (!cam.open("/dev/video0")) { std::printf("FAIL open: %s\n", cam.lastError().c_str()); return 1; }
+    if (!cam.open("/dev/video1")) { std::printf("FAIL open: %s\n", cam.lastError().c_str()); return 1; }
     if (!cam.setFormat(v4l2_fourcc('M', 'J', 'P', 'G'), 640, 480)) {
         std::printf("FAIL setFormat: %s\n", cam.lastError().c_str()); return 1;
     }
 
     recording::RecordingService rec;
     recording::RecordingService::Config cfg{recDir, 640, 480, 30, 1};
+    cfg.audioDevice = "plughw:1,0";
     if (!rec.start(cfg)) { std::printf("FAIL rec start: %s\n", rec.lastError().c_str()); return 1; }
 
     if (!cam.start([&](const camera::Frame &f) { rec.pushFrame(f.data, f.size); })) {

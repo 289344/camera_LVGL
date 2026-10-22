@@ -37,7 +37,7 @@ def handle(conn: socket.socket, addr):
 
         raw_name = recv_exact(conn, name_len)
         name = raw_name.decode("utf-8", "replace")
-        safe_name = os.path.basename(name) or "received.avi"
+        safe_name = os.path.basename(name) or "received.mp4"
         dest = os.path.join(DEST, safe_name)
 
         os.makedirs(DEST, exist_ok=True)
