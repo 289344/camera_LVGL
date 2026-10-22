@@ -34,7 +34,7 @@ if [[ ! -f "$TARGET_LIB/libfreetype.so.6" || ! -f "$TARGET_INC/jpeglib.h" ]]; th
 fi
 
 CFLAGS=(
-  -std=gnu99 -O2 -Wall -Wextra -pthread
+  -std=gnu99 -O2 -Wall -Wextra -pthread -MMD -MP
   -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard
   -I"$ROOT"
   -I"$ROOT/third_party/lvgl"
@@ -45,7 +45,7 @@ CFLAGS=(
 )
 
 CXXFLAGS=(
-  -std=c++14 -O2 -Wall -Wextra -pthread
+  -std=c++14 -O2 -Wall -Wextra -pthread -MMD -MP
   -march=armv7-a -mfpu=neon-vfpv4 -mfloat-abi=hard
   -I"$ROOT/include"
   -I"$ROOT/src"
@@ -63,9 +63,14 @@ compile_c() {
   local src="$1"
   local rel="${src#$ROOT/}"
   local obj="$OBJ_DIR/${rel//\//_}.o"
-  if [[ "$src" -nt "$obj" ]]; then
+  local dep="$obj.d"
+  local needs_build=1
+  if [[ -f "$obj" && -f "$dep" ]] && make -q -f "$dep" "$obj" >/dev/null 2>&1; then
+    needs_build=0
+  fi
+  if [[ "$needs_build" -eq 1 ]]; then
     echo "CC   $rel"
-    "$CC" "${CFLAGS[@]}" -c "$src" -o "$obj"
+    "$CC" "${CFLAGS[@]}" -MF "$dep" -c "$src" -o "$obj"
   fi
   OBJECTS+=("$obj")
 }
@@ -74,9 +79,14 @@ compile_cxx() {
   local src="$1"
   local rel="${src#$ROOT/}"
   local obj="$OBJ_DIR/${rel//\//_}.o"
-  if [[ "$src" -nt "$obj" ]]; then
+  local dep="$obj.d"
+  local needs_build=1
+  if [[ -f "$obj" && -f "$dep" ]] && make -q -f "$dep" "$obj" >/dev/null 2>&1; then
+    needs_build=0
+  fi
+  if [[ "$needs_build" -eq 1 ]]; then
     echo "CXX  $rel"
-    "$CXX" "${CXXFLAGS[@]}" -c "$src" -o "$obj"
+    "$CXX" "${CXXFLAGS[@]}" -MF "$dep" -c "$src" -o "$obj"
   fi
   OBJECTS+=("$obj")
 }

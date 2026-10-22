@@ -43,6 +43,7 @@
           <span id="sourceText">源地址 --</span>
         </div>
         <div class="actions">
+          <button id="audioButton" class="button button-audio" type="button" title="浏览器需要一次点击才能播放直播声音">开启声音</button>
           <button id="snapshotButton" class="button" type="button">保存快照</button>
           <button id="reconnectButton" class="button" type="button">重新连接</button>
           <button id="fullscreenButton" class="button button-primary" type="button">全屏查看</button>
@@ -63,9 +64,18 @@
             <span class="metric-unit">FPS</span>
           </div>
           <div class="metric">
-            <span class="metric-label">带宽</span>
+            <span class="metric-label">视频码率</span>
             <strong id="bitrateText">0.0</strong>
             <span class="metric-unit">kbps</span>
+          </div>
+          <div class="metric">
+            <span class="metric-label">音频码率</span>
+            <strong id="audioBitrateText">0.0</strong>
+            <span class="metric-unit">kbps</span>
+          </div>
+          <div class="metric">
+            <span class="metric-label">声音采样</span>
+            <strong id="audioRateText">--</strong>
           </div>
           <div class="metric">
             <span class="metric-label">累计帧数</span>
@@ -86,16 +96,17 @@
           <li>在 PC 运行 <code>python3 tools/preview_server.py</code></li>
           <li>在板端先点击“开始预览”</li>
           <li>再点击“网络预览”，状态变为“直播中”</li>
+          <li>在网页点击“开启声音”播放麦克风声音</li>
         </ol>
         <p class="hint">浏览器地址：<strong id="pageAddress">当前页面</strong></p>
-        <p class="hint">板端推流端口 <code>9002/TCP</code>，网页端口 <code>8080/HTTP</code>。画面只在局域网传输，不经过第三方服务。</p>
+        <p class="hint">板端画面使用 <code>9002/TCP</code>，声音使用 <code>9003/TCP</code>，网页端口 <code>8080/HTTP</code>。音视频只在局域网传输，不经过第三方服务。</p>
       </section>
     </aside>
   </main>
 
   <footer>
-    <span>JPEG 帧流</span>
-    <span>低延迟局域网监控</span>
+    <span>JPEG + PCM 音视频流</span>
+    <span>低延迟局域网监控 · 浏览器首次播放声音需点击授权</span>
     <span id="footerStatus">未连接</span>
   </footer>
 

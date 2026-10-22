@@ -228,6 +228,8 @@ button { font: inherit; }
 .button:active { transform: translateY(0); }
 .button-primary { color: #07101d; border-color: transparent; background: linear-gradient(135deg, #72b2ff, #50d9ca); font-weight: 700; }
 .button-primary:hover { background: linear-gradient(135deg, #8bc1ff, #67e4d6); }
+.button-audio.is-active { color: #d8fff0; border-color: rgba(81, 219, 147, 0.45); background: rgba(24, 92, 64, 0.62); }
+.button-audio.is-active:hover { background: rgba(30, 113, 78, 0.72); }
 
 .side-panel { display: flex; flex-direction: column; gap: 18px; }
 .panel { border-radius: 15px; padding: 20px; }
@@ -281,7 +283,7 @@ footer span:last-child { margin-left: auto; }
   .layout { width: calc(100% - 20px); margin-top: 10px; }
   .video-shell { min-height: 210px; }
   .toolbar { align-items: stretch; flex-direction: column; }
-  .actions { display: grid; grid-template-columns: repeat(3, 1fr); }
+  .actions { display: grid; grid-template-columns: repeat(2, 1fr); }
   .button { padding-inline: 6px; font-size: 12px; }
   .side-panel { grid-template-columns: 1fr; }
   footer { width: calc(100% - 24px); flex-wrap: wrap; }

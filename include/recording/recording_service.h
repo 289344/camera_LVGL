@@ -25,6 +25,7 @@ public:
         uint32_t audioChannels = 1;
         uint32_t audioSampleRate = 16000;
         uint32_t audioBitrate = 64000;
+        bool useExternalAudio = false;
     };
 
     RecordingService() = default;
@@ -35,6 +36,7 @@ public:
 
     bool start(const Config &cfg);
     void pushFrame(const uint8_t *data, size_t size);  // 拷贝入队，供采集线程调用
+    void pushAudio(const uint8_t *data, size_t size);  // 外部共享麦克风 PCM
     void stop();                                       // 停止并最终化文件
 
     bool isRecording() const { return recording_.load(); }
@@ -55,7 +57,9 @@ private:
     std::atomic<bool> recording_{false};
     std::atomic<bool> stopRequested_{false};
     std::FILE *ffmpegIn_ = nullptr;
+    std::FILE *audioIn_ = nullptr;
     int ffmpegPid_ = -1;
+    std::mutex audioMutex_;
 
     std::mutex mtx_;
     std::condition_variable cv_;

@@ -21,6 +21,9 @@ namespace {
 constexpr uint32_t kMJPG = v4l2_fourcc('M', 'J', 'P', 'G');
 constexpr uint32_t kYUYV = v4l2_fourcc('Y', 'U', 'Y', 'V');
 constexpr uint16_t kPreviewPort = 9002;
+constexpr uint16_t kAudioPort = 9003;
+constexpr uint32_t kLiveAudioSampleRate = 16000;
+constexpr uint32_t kLiveAudioChannels = 1;
 
 #ifdef CAMERA_LVGL_BOARD
 // 板端传输目标：PC 接收服务
@@ -248,8 +251,28 @@ void AppController::toggleNetworkPreview() {
     cfg.width = previewW_;
     cfg.height = previewH_;
     cfg.maxFps = 20;
+    if (!startMicrophoneIfNeeded()) {
+        ui_->setStatusText("网络直播启动失败: " + microphone_.lastError(), 0xff5555);
+        ui_->setNetworkPreviewState(false, false);
+        return;
+    }
+
+    network_preview::NetworkAudioService::Config audioCfg;
+    audioCfg.host = transferHost_;
+    audioCfg.port = kAudioPort;
+    audioCfg.sampleRate = kLiveAudioSampleRate;
+    audioCfg.channels = kLiveAudioChannels;
+    if (!networkAudio_.start(audioCfg)) {
+        stopMicrophoneIfUnused();
+        ui_->setStatusText("音频直播启动失败: " + networkAudio_.lastError(), 0xff5555);
+        ui_->setNetworkPreviewState(false, false);
+        return;
+    }
+
     if (!networkPreview_.start(cfg)) {
-        ui_->setStatusText("网络预览启动失败: " + networkPreview_.lastError(), 0xff5555);
+        networkAudio_.stop();
+        stopMicrophoneIfUnused();
+        ui_->setStatusText("视频直播启动失败: " + networkPreview_.lastError(), 0xff5555);
         ui_->setNetworkPreviewState(false, false);
         return;
     }
@@ -257,15 +280,43 @@ void AppController::toggleNetworkPreview() {
     networkPreviewing_.store(true);
     networkConnectedNotified_ = false;
     ui_->setNetworkPreviewState(true, false);
-    ui_->setStatusText("网络预览已启动，正在连接 PC");
+    ui_->setStatusText("网络音视频直播已启动，正在连接 PC");
 }
 
 void AppController::stopNetworkPreview() {
     const bool wasActive = networkPreviewing_.exchange(false);
     networkConnectedNotified_ = false;
     networkPreview_.stop();
+    networkAudio_.stop();
+    stopMicrophoneIfUnused();
     if (ui_) ui_->setNetworkPreviewState(false, false);
-    if (wasActive && ui_) ui_->setStatusText("网络预览已停止");
+    if (wasActive && ui_) ui_->setStatusText("网络音视频直播已停止");
+}
+
+bool AppController::startMicrophoneIfNeeded() {
+    if (microphone_.isActive()) return true;
+
+    audio::MicrophoneCapture::Config cfg;
+    cfg.device = audioDevice_;
+    cfg.sampleRate = kLiveAudioSampleRate;
+    cfg.channels = kLiveAudioChannels;
+    cfg.periodFrames = 640;
+    cfg.bufferFrames = 1920;
+    microphoneErrorNotified_ = false;
+
+    const bool started = microphone_.start(
+        cfg, [this](const uint8_t *data, size_t size) {
+            if (networkPreviewing_.load()) networkAudio_.pushPcm(data, size);
+            if (recording_.load()) recorder_.pushAudio(data, size);
+        });
+    if (!started) return false;
+
+    microphoneErrorNotified_ = false;
+    return true;
+}
+
+void AppController::stopMicrophoneIfUnused() {
+    if (!networkPreviewing_.load() && !recording_.load()) microphone_.stop();
 }
 
 void AppController::handleFrame(const camera::Frame &frame) {
@@ -324,12 +375,24 @@ void AppController::tick() {
     std::string err = popError();
     if (!err.empty()) ui_->setStatusText(err, 0xff5555);
 
+    if ((networkPreviewing_.load() || recording_.load()) &&
+        !microphone_.isActive() && !microphoneErrorNotified_) {
+        microphoneErrorNotified_ = true;
+        const std::string micError = microphone_.lastError().empty()
+            ? "麦克风采集已停止，请检查 USB 麦克风和 /tmp/camera_microphone.log"
+            : microphone_.lastError();
+        microphone_.stop();
+        if (recording_.load()) stopRecording();
+        if (networkPreviewing_.load()) stopNetworkPreview();
+        ui_->setStatusText(micError, 0xff5555);
+    }
+
     if (networkPreviewing_.load()) {
-        const bool connected = networkPreview_.isConnected();
+        const bool connected = networkPreview_.isConnected() && networkAudio_.isConnected();
         ui_->setNetworkPreviewState(true, connected);
         if (connected && !networkConnectedNotified_) {
             networkConnectedNotified_ = true;
-            ui_->setStatusText("网络预览直播中", 0x66cc66);
+            ui_->setStatusText("网络音视频直播中", 0x66cc66);
         } else if (!connected) {
             networkConnectedNotified_ = false;
         }
@@ -387,10 +450,17 @@ void AppController::startRecording() {
     cfg.fpsDen = 1;
     cfg.audioDevice = audioDevice_;
     cfg.audioChannels = 1;
-    cfg.audioSampleRate = 16000;
+    cfg.audioSampleRate = kLiveAudioSampleRate;
     cfg.audioBitrate = 64000;
+    cfg.useExternalAudio = true;
+
+    if (!startMicrophoneIfNeeded()) {
+        ui_->setStatusText("录像无法启动麦克风: " + microphone_.lastError(), 0xff5555);
+        return;
+    }
 
     if (!recorder_.start(cfg)) {
+        stopMicrophoneIfUnused();
         ui_->setStatusText("录像失败: " + recorder_.lastError(), 0xff5555);
         return;
     }
@@ -404,6 +474,7 @@ void AppController::stopRecording() {
     if (!recording_.load()) return;
     recorder_.stop();
     recording_.store(false);
+    stopMicrophoneIfUnused();
     if (ui_) {
         ui_->setRecordButtons(false);
         ui_->setRecordState(false, 0);

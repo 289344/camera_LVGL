@@ -6,11 +6,13 @@
 #include <string>
 #include <vector>
 
+#include "audio/microphone_capture.h"
 #include "camera/camera_device.h"
 #include "preview/frame_pool.h"
 #include "recording/recording_service.h"
 #include "file_manager/file_manager.h"
 #include "file_transfer/file_transfer_service.h"
+#include "network_preview/network_audio_service.h"
 #include "network_preview/network_preview_service.h"
 
 class Ui;
@@ -64,6 +66,8 @@ private:
     void buildCameraList();
     bool chooseFormat(camera::CameraDevice &dev, uint32_t &pixfmt, uint32_t &w, uint32_t &h);
     void handleFrame(const camera::Frame &frame);
+    bool startMicrophoneIfNeeded();
+    void stopMicrophoneIfUnused();
     std::string popError();
 
     Ui *ui_ = nullptr;
@@ -79,6 +83,8 @@ private:
 
     recording::RecordingService recorder_;
     network_preview::NetworkPreviewService networkPreview_;
+    network_preview::NetworkAudioService networkAudio_;
+    audio::MicrophoneCapture microphone_;
     std::vector<uint8_t> jpegEncodeBuf_;   // 仅采集线程使用
 
     transfer::FileTransferService transfer_;
@@ -87,6 +93,7 @@ private:
     uint32_t previewH_ = 0;
     int displayedFrame_ = -1;
     bool networkConnectedNotified_ = false;
+    bool microphoneErrorNotified_ = false;
 
     std::mutex errMutex_;
     std::string pendingError_;

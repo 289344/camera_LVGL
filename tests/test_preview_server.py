@@ -15,6 +15,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 SERVER = ROOT / "tools" / "preview_server.py"
 HEADER = struct.Struct(">4sBBHIQHHHHI")
+AUDIO_HEADER = struct.Struct(">4sBBHIQHHHHI")
 
 
 def free_port() -> int:
@@ -28,10 +29,12 @@ class PreviewServerTest(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.http_port = free_port()
         cls.board_port = free_port()
+        cls.audio_port = free_port()
         cls.process = subprocess.Popen(
             [sys.executable, str(SERVER),
              "--http-host", "127.0.0.1", "--http-port", str(cls.http_port),
-             "--board-host", "127.0.0.1", "--board-port", str(cls.board_port)],
+             "--board-host", "127.0.0.1", "--board-port", str(cls.board_port),
+             "--audio-host", "127.0.0.1", "--audio-port", str(cls.audio_port)],
             cwd=ROOT,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -61,7 +64,9 @@ class PreviewServerTest(unittest.TestCase):
 
     def test_frame_ingest_and_browser_stream(self) -> None:
         payload = b"\xff\xd8preview-smoke-test\xff\xd9"
-        with socket.create_connection(("127.0.0.1", self.board_port), timeout=2) as board:
+        pcm = struct.pack("<" + "h" * 640, *([1000] * 640))
+        with socket.create_connection(("127.0.0.1", self.board_port), timeout=2) as board, \
+             socket.create_connection(("127.0.0.1", self.audio_port), timeout=2) as audio:
             for sequence in (1, 2):
                 header = HEADER.pack(
                     b"CAML", 1, 1, 0, sequence, int(time.time() * 1000),
@@ -69,17 +74,26 @@ class PreviewServerTest(unittest.TestCase):
                 )
                 board.sendall(header + payload)
 
+            audio_header = AUDIO_HEADER.pack(
+                b"CAMA", 1, 1, 0, 1, int(time.time() * 1000),
+                16000, 1, 1, 0, len(pcm),
+            )
+            audio.sendall(audio_header + pcm)
+
             deadline = time.monotonic() + 2
             status = {}
             while time.monotonic() < deadline:
                 with urllib.request.urlopen(self.url("/api/status"), timeout=1) as response:
                     status = json.load(response)
-                if status.get("frames_received", 0) >= 2:
+                if status.get("frames_received", 0) >= 2 and status.get("audio_packets_received", 0) >= 1:
                     break
                 time.sleep(0.05)
 
             self.assertTrue(status["board_connected"])
             self.assertTrue(status["streaming"])
+            self.assertTrue(status["audio_connected"])
+            self.assertTrue(status["audio_streaming"])
+            self.assertEqual(status["audio_sample_rate"], 16000)
             self.assertEqual((status["width"], status["height"]), (320, 240))
 
             conn = http.client.HTTPConnection("127.0.0.1", self.http_port, timeout=2)
@@ -92,14 +106,25 @@ class PreviewServerTest(unittest.TestCase):
             self.assertIn(b"--frame", data)
             self.assertIn(payload, data)
 
+            audio_conn = http.client.HTTPConnection("127.0.0.1", self.http_port, timeout=2)
+            audio_conn.request("GET", "/stream.pcm")
+            audio_response = audio_conn.getresponse()
+            self.assertEqual(audio_response.status, 200)
+            self.assertTrue(audio_response.getheader("Content-Type").startswith("audio/L16"))
+            time.sleep(0.05)
+            audio.sendall(audio_header + pcm)
+            self.assertEqual(audio_response.read(len(pcm)), pcm)
+            audio_conn.close()
+
         deadline = time.monotonic() + 2
         while time.monotonic() < deadline:
             with urllib.request.urlopen(self.url("/api/status"), timeout=1) as response:
                 status = json.load(response)
-            if not status["board_connected"]:
+            if not status["board_connected"] and not status["audio_connected"]:
                 break
             time.sleep(0.05)
         self.assertFalse(status["board_connected"])
+        self.assertFalse(status["audio_connected"])
 
 
 if __name__ == "__main__":

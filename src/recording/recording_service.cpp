@@ -9,6 +9,7 @@
 #include <fcntl.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <vector>
 
 #include "fs_compat.h"
 
@@ -22,7 +23,8 @@ std::string ratioString(uint32_t numerator, uint32_t denominator) {
     return std::string(buf);
 }
 
-void runFfmpeg(const std::string &path, const RecordingService::Config &cfg, int inputFd) {
+void runFfmpeg(const std::string &path, const RecordingService::Config &cfg,
+               int inputFd, int audioFd) {
     const std::string fps = ratioString(cfg.fpsNum, cfg.fpsDen);
     const std::string channels = std::to_string(cfg.audioChannels);
     const std::string sampleRate = std::to_string(cfg.audioSampleRate);
@@ -30,6 +32,11 @@ void runFfmpeg(const std::string &path, const RecordingService::Config &cfg, int
 
     ::dup2(inputFd, STDIN_FILENO);
     if (inputFd != STDIN_FILENO) ::close(inputFd);
+    if (cfg.useExternalAudio) {
+        if (audioFd < 0) ::_exit(127);
+        ::dup2(audioFd, 3);
+        if (audioFd != 3) ::close(audioFd);
+    }
 
     int logFd = ::open("/tmp/camera_recording.log", O_WRONLY | O_CREAT | O_TRUNC, 0644);
     if (logFd >= 0) {
@@ -38,18 +45,31 @@ void runFfmpeg(const std::string &path, const RecordingService::Config &cfg, int
         if (logFd > STDERR_FILENO) ::close(logFd);
     }
 
-    ::execl("/usr/bin/ffmpeg", "ffmpeg",
-            "-nostdin", "-hide_banner", "-loglevel", "warning", "-y",
-            "-use_wallclock_as_timestamps", "1",
-            "-thread_queue_size", "512",
-            "-f", "mjpeg", "-framerate", fps.c_str(), "-i", "pipe:0",
-            "-thread_queue_size", "512",
-            "-f", "alsa", "-channels", channels.c_str(),
-            "-sample_rate", sampleRate.c_str(), "-i", cfg.audioDevice.c_str(),
-            "-map", "0:v:0", "-map", "1:a:0",
-            "-c:v", "copy", "-c:a", "aac", "-b:a", bitrate.c_str(),
-            "-vsync", "vfr", "-shortest", "-movflags", "+faststart", path.c_str(),
-            static_cast<char *>(nullptr));
+    std::vector<std::string> args = {
+        "ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "warning", "-y",
+        "-use_wallclock_as_timestamps", "1",
+        "-thread_queue_size", "512",
+        "-f", "mjpeg", "-framerate", fps, "-i", "pipe:0",
+        "-thread_queue_size", "512"
+    };
+    if (cfg.useExternalAudio) {
+        args.insert(args.end(), {"-f", "s16le", "-ar", sampleRate, "-ac", channels,
+                                 "-i", "pipe:3"});
+    } else {
+        args.insert(args.end(), {"-f", "alsa", "-channels", channels,
+                                 "-sample_rate", sampleRate, "-i", cfg.audioDevice});
+    }
+    args.insert(args.end(), {
+        "-map", "0:v:0", "-map", "1:a:0",
+        "-c:v", "copy", "-c:a", "aac", "-b:a", bitrate,
+        "-vsync", "vfr", "-shortest", "-movflags", "+faststart", path
+    });
+
+    std::vector<char *> argv;
+    argv.reserve(args.size() + 1);
+    for (auto &arg : args) argv.push_back(const_cast<char *>(arg.c_str()));
+    argv.push_back(nullptr);
+    ::execv("/usr/bin/ffmpeg", argv.data());
     ::_exit(127);
 }
 
@@ -92,7 +112,7 @@ bool RecordingService::start(const Config &cfg) {
         setError("创建目录失败: " + cfg.dir);
         return false;
     }
-    if (cfg.audioDevice.empty()) {
+    if (!cfg.useExternalAudio && cfg.audioDevice.empty()) {
         setError("未配置麦克风设备");
         return false;
     }
@@ -104,25 +124,41 @@ bool RecordingService::start(const Config &cfg) {
         return false;
     }
 
+    int audioPipeFds[2] = {-1, -1};
+    if (cfg.useExternalAudio && ::pipe(audioPipeFds) != 0) {
+        ::close(pipeFds[0]);
+        ::close(pipeFds[1]);
+        setError("创建音频管道失败: " + std::string(std::strerror(errno)));
+        return false;
+    }
+
     // ALSA 设备异常或 FFmpeg 提前退出时，写入管道应返回 EPIPE，而不是终止主程序。
     std::signal(SIGPIPE, SIG_IGN);
 
     const pid_t pid = ::fork();
     if (pid == 0) {
         ::close(pipeFds[1]);
-        runFfmpeg(filePath_, cfg, pipeFds[0]);
+        if (cfg.useExternalAudio) ::close(audioPipeFds[1]);
+        runFfmpeg(filePath_, cfg, pipeFds[0],
+                  cfg.useExternalAudio ? audioPipeFds[0] : -1);
     }
     if (pid < 0) {
         ::close(pipeFds[0]);
         ::close(pipeFds[1]);
+        if (cfg.useExternalAudio) {
+            ::close(audioPipeFds[0]);
+            ::close(audioPipeFds[1]);
+        }
         setError("启动 FFmpeg 失败: " + std::string(std::strerror(errno)));
         return false;
     }
 
     ::close(pipeFds[0]);
+    if (cfg.useExternalAudio) ::close(audioPipeFds[0]);
     std::FILE *input = ::fdopen(pipeFds[1], "wb");
     if (!input) {
         ::close(pipeFds[1]);
+        if (cfg.useExternalAudio) ::close(audioPipeFds[1]);
         ::kill(pid, SIGTERM);
         ::waitpid(pid, nullptr, 0);
         setError("打开 FFmpeg 输入管道失败");
@@ -130,7 +166,22 @@ bool RecordingService::start(const Config &cfg) {
     }
     std::setvbuf(input, nullptr, _IONBF, 0);
 
+    std::FILE *audioInput = nullptr;
+    if (cfg.useExternalAudio) {
+        audioInput = ::fdopen(audioPipeFds[1], "wb");
+        if (!audioInput) {
+            ::close(audioPipeFds[1]);
+            std::fclose(input);
+            ::kill(pid, SIGTERM);
+            ::waitpid(pid, nullptr, 0);
+            setError("打开 FFmpeg 音频管道失败");
+            return false;
+        }
+        std::setvbuf(audioInput, nullptr, _IONBF, 0);
+    }
+
     ffmpegIn_ = input;
+    audioIn_ = audioInput;
     ffmpegPid_ = static_cast<int>(pid);
     fpsNum_ = cfg.fpsNum;
     fpsDen_ = cfg.fpsDen;
@@ -146,6 +197,17 @@ bool RecordingService::start(const Config &cfg) {
     recording_.store(true);
     thread_ = std::thread(&RecordingService::writerLoop, this);
     return true;
+}
+
+void RecordingService::pushAudio(const uint8_t *data, size_t size) {
+    if (!recording_.load() || !data || size == 0) return;
+
+    std::lock_guard<std::mutex> lk(audioMutex_);
+    if (!recording_.load() || !audioIn_) return;
+    const size_t written = std::fwrite(data, 1, size, audioIn_);
+    if (written != size) {
+        setError("写入共享麦克风音频失败");
+    }
 }
 
 void RecordingService::pushFrame(const uint8_t *data, size_t size) {
@@ -174,6 +236,13 @@ void RecordingService::stop() {
     stopRequested_.store(true);
     cv_.notify_all();
     if (thread_.joinable()) thread_.join();
+    {
+        std::lock_guard<std::mutex> lk(audioMutex_);
+        if (audioIn_) {
+            std::fclose(audioIn_);
+            audioIn_ = nullptr;
+        }
+    }
     waitForFfmpeg();
 }
 
