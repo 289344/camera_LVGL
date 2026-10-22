@@ -35,6 +35,8 @@ struct FbContext {
     uint32_t mapSize = 0;
 };
 
+int gActiveFbFd = -1;
+
 void flushCb(lv_display_t *disp, const lv_area_t *area, uint8_t *color) {
     FbContext *ctx = static_cast<FbContext *>(lv_display_get_driver_data(disp));
     if (!ctx || !ctx->map) {
@@ -67,7 +69,10 @@ void deleteCb(lv_event_t *e) {
     if (!ctx) return;
 
     if (ctx->map) ::munmap(ctx->map, ctx->mapSize);
-    if (ctx->fd >= 0) ::close(ctx->fd);
+    if (ctx->fd >= 0) {
+        if (gActiveFbFd == ctx->fd) gActiveFbFd = -1;
+        ::close(ctx->fd);
+    }
     std::free(ctx->drawBuf);
     delete ctx;
     lv_display_set_driver_data(disp, nullptr);
@@ -135,8 +140,16 @@ lv_display_t *createDisplay() {
     lv_display_set_flush_cb(disp, flushCb);
     lv_display_add_event_cb(disp, deleteCb, LV_EVENT_DELETE, nullptr);
     lv_display_set_buffers(disp, drawBuf, nullptr, bufSize, LV_DISPLAY_RENDER_MODE_DIRECT);
+    gActiveFbFd = fd;
 
     return disp;
+}
+
+void keepDisplayAwake() {
+    if (gActiveFbFd < 0) return;
+    // 板端 fbcon 默认 consoleblank=600，且该内核参数只读。
+    // 周期性解除 blank，避免相册空闲或播放结束后 LCD 一直黑屏。
+    ::ioctl(gActiveFbFd, FBIOBLANK, FB_BLANK_UNBLANK);
 }
 
 }  // namespace board
@@ -148,6 +161,8 @@ namespace board {
 lv_display_t *createDisplay() {
     return nullptr;
 }
+
+void keepDisplayAwake() {}
 
 }  // namespace board
 

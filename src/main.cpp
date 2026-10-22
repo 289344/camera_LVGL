@@ -7,10 +7,17 @@
 
 static Ui gUi;
 static AppController gController;
+#ifdef CAMERA_LVGL_BOARD
+static uint32_t gDisplayAwakeCounter = 0;
+#endif
 
 static void uiTick(lv_timer_t *timer) {
     (void)timer;
     gController.tick();
+#ifdef CAMERA_LVGL_BOARD
+    // 每 5 秒解除一次内核控制台 blank，适配 consoleblank=600 的板端系统。
+    if (++gDisplayAwakeCounter % 150 == 0) board::keepDisplayAwake();
+#endif
 }
 
 int main(void) {
@@ -19,6 +26,7 @@ int main(void) {
 #ifdef CAMERA_LVGL_BOARD
     lv_display_t *disp = board::createDisplay();
     if (!disp) return 1;
+    board::keepDisplayAwake();
     lv_indev_t *touch = lv_evdev_create(LV_INDEV_TYPE_POINTER, "/dev/input/event1");
     if (touch) {
         lv_indev_set_display(touch, disp);
@@ -72,6 +80,7 @@ int main(void) {
         gController.pollPlayback();
         if (wasPlaying && !gController.isPlayingVideo()) {
             // 外部播放器直接写 /dev/fb0，结束后强制完整重绘相机界面。
+            board::keepDisplayAwake();
             lv_obj_invalidate(lv_screen_active());
         }
         if (gController.isPlayingVideo()) {

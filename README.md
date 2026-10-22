@@ -122,6 +122,8 @@ adb shell 'cd /root/camera_lvgl && setsid nohup ./camera_lvgl > /tmp/camera_lvgl
 
 相册中的录像使用板端 GStreamer（`gst-launch-1.0` + `fbdevsink`）全屏播放。双击影片后 LVGL 会暂停刷新，播放结束或失败后自动恢复相册画面；播放日志位于 `/tmp/camera_playback.log`。
 
+板端内核默认启用 `consoleblank=600`（空闲 10 分钟熄屏）。程序每 5 秒发送一次 `FBIOBLANK(UNBLANK)` 保活，避免相册空闲或视频播放结束后 LCD 保持黑屏。
+
 PC 端接收服务：
 
 ```bash
