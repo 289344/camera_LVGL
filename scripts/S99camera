@@ -1,33 +1,56 @@
 #!/bin/sh
 
-DAEMON="/root/camera_lvgl/camera_lvgl"
+SUPERVISOR="/root/camera_lvgl/camera_supervisor.sh"
 DAEMON_DIR="/root/camera_lvgl"
-PIDFILE="/var/run/camera_lvgl.pid"
+SUPERVISOR_PIDFILE="/var/run/camera_lvgl_supervisor.pid"
+APP_PIDFILE="/var/run/camera_lvgl.pid"
+FB_BLANK="/sys/class/graphics/fb0/blank"
 
 start() {
     printf 'Starting camera_lvgl: '
-    # psplash 会占用 /dev/fb0 并可能再次弹出旧画面，先关闭
+    # psplash 会占用 /dev/fb0 并可能再次弹出旧画面，先关闭。
     kill $(pidof psplash) 2>/dev/null || true
+    printf '0' > "$FB_BLANK" 2>/dev/null || true
 
-    if [ ! -x "$DAEMON" ]; then
-        echo "FAIL (missing $DAEMON)"
+    if [ ! -x "$SUPERVISOR" ]; then
+        echo "FAIL (missing $SUPERVISOR)"
         return 1
     fi
 
-    start-stop-daemon -b -m -S -q -p "$PIDFILE" -d "$DAEMON_DIR" -x "$DAEMON"
-    if [ $? -eq 0 ]; then
-        echo "OK"
-    else
+    start-stop-daemon -b -m -S -q -p "$SUPERVISOR_PIDFILE" -d "$DAEMON_DIR" -x "$SUPERVISOR"
+    if [ $? -ne 0 ]; then
         echo "FAIL"
         return 1
     fi
+
+    # 等待主程序真正启动，确保开机脚本返回时屏幕已经由相机 UI 接管。
+    i=0
+    while [ "$i" -lt 5 ]; do
+        if pidof camera_lvgl >/dev/null 2>&1; then
+            echo "OK"
+            return 0
+        fi
+        sleep 1
+        i=$((i + 1))
+    done
+
+    echo "FAIL (application did not start)"
+    return 1
 }
 
 stop() {
     printf 'Stopping camera_lvgl: '
-    start-stop-daemon -K -q -p "$PIDFILE" 2>/dev/null || true
-    rm -f "$PIDFILE"
-    kill $(pidof camera_lvgl) 2>/dev/null || true
+    start-stop-daemon -K -q -p "$SUPERVISOR_PIDFILE" 2>/dev/null || true
+    supervisor_pid=$(cat "$SUPERVISOR_PIDFILE" 2>/dev/null)
+    if [ -n "$supervisor_pid" ]; then
+        kill "$supervisor_pid" 2>/dev/null || true
+    fi
+    rm -f "$SUPERVISOR_PIDFILE"
+    app_pid=$(pidof camera_lvgl)
+    if [ -n "$app_pid" ]; then
+        kill $app_pid 2>/dev/null || true
+    fi
+    rm -f "$APP_PIDFILE"
     echo "OK"
 }
 

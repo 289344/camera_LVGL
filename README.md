@@ -132,7 +132,7 @@ adb shell '/etc/init.d/S99camera restart'
 
 相册中的录像使用板端 GStreamer（`playbin` + `fbdevsink` + `alsasink`）全屏播放，画面通过黑边适配 1024×600，AAC 音频输出到麦克风所属的 USB 声卡。双击影片后 LVGL 会暂停刷新，播放结束或失败后自动恢复相册画面；播放日志位于 `/tmp/camera_playback.log`。
 
-板端内核默认启用 `consoleblank=600`（空闲 10 分钟熄屏）。程序每 5 秒发送一次 `FBIOBLANK(UNBLANK)` 保活，避免相册空闲或视频播放结束后 LCD 保持黑屏。
+板端内核默认启用只读参数 `consoleblank=600`。开机守护脚本 `camera_supervisor.sh` 会每秒解除 framebuffer blank，因此相册空闲、录像播放结束或主程序异常退出时都不会永久熄屏；相机进程异常退出后也会在 1～2 秒内自动重启。主程序自身仍每 5 秒发送一次 `FBIOBLANK(UNBLANK)` 作为第二层保护。
 
 PC 端接收服务：
 
@@ -151,13 +151,14 @@ adb shell '/etc/init.d/S99camera restart'
 
 ## 板端开机自启动
 
-板端 init 脚本位于 `/etc/init.d/S99camera`，仓库内备份为 `scripts/S99camera`。
+板端 init 脚本位于 `/etc/init.d/S99camera`，显示及进程守护脚本位于 `/root/camera_lvgl/camera_supervisor.sh`，仓库内分别备份为 `scripts/S99camera` 和 `scripts/camera_supervisor.sh`。
 
 安装/更新：
 
 ```bash
+adb push scripts/camera_supervisor.sh /root/camera_lvgl/camera_supervisor.sh
 adb push scripts/S99camera /etc/init.d/S99camera
-adb shell 'chmod +x /etc/init.d/S99camera'
+adb shell 'chmod +x /root/camera_lvgl/camera_supervisor.sh /etc/init.d/S99camera'
 ```
 
 禁用原来的 LED/温湿度程序：
