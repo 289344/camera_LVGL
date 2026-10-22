@@ -67,6 +67,8 @@ typedef struct {
     int root_y;
     int key;
     lv_indev_state_t state;
+    bool touch_pending;
+    bool fresh_position;
     bool deleting;
     /* Multi-touch support */
 #if LV_USE_GESTURE_RECOGNITION
@@ -187,6 +189,8 @@ static void _evdev_read(lv_indev_t * indev, lv_indev_data_t * data)
 #endif
                 if(in.code == ABS_X || in.code == ABS_MT_POSITION_X) {
                     dsc->root_x = in.value;
+                    dsc->fresh_position = true;
+                    if(dsc->touch_pending) dsc->state = LV_INDEV_STATE_PRESSED;
 #if LV_USE_GESTURE_RECOGNITION
                     if(in.code == ABS_MT_POSITION_X && dsc->current_slot < MAX_TOUCH_POINTS) {
                         dsc->touch_data[dsc->current_slot].point.x = in.value;
@@ -197,6 +201,8 @@ static void _evdev_read(lv_indev_t * indev, lv_indev_data_t * data)
                 }
                 else if(in.code == ABS_Y || in.code == ABS_MT_POSITION_Y) {
                     dsc->root_y = in.value;
+                    dsc->fresh_position = true;
+                    if(dsc->touch_pending) dsc->state = LV_INDEV_STATE_PRESSED;
 #if LV_USE_GESTURE_RECOGNITION
                     if(in.code == ABS_MT_POSITION_Y && dsc->current_slot < MAX_TOUCH_POINTS) {
                         dsc->touch_data[dsc->current_slot].point.y = in.value;
@@ -206,8 +212,17 @@ static void _evdev_read(lv_indev_t * indev, lv_indev_data_t * data)
 #endif
                 }
                 else if(in.code == ABS_MT_TRACKING_ID) {
-                    if(in.value == -1) dsc->state = LV_INDEV_STATE_RELEASED;
-                    else dsc->state = LV_INDEV_STATE_PRESSED;
+                    if(in.value == -1) {
+                        dsc->state = LV_INDEV_STATE_RELEASED;
+                        dsc->touch_pending = false;
+                        dsc->fresh_position = false;
+                    }
+                    else {
+                        /* 部分驱动先上报按下，坐标要到后续事件才到达。
+                         * 等待本次触摸的新坐标，避免用旧坐标锁定错误控件。 */
+                        dsc->touch_pending = true;
+                        if(dsc->fresh_position) dsc->state = LV_INDEV_STATE_PRESSED;
+                    }
 #if LV_USE_GESTURE_RECOGNITION
                     if(in.value == -1) {
                         if(dsc->current_slot < MAX_TOUCH_POINTS) {
@@ -236,9 +251,20 @@ static void _evdev_read(lv_indev_t * indev, lv_indev_data_t * data)
                 }
         }
         else if(in.type == EV_KEY) {
-            if(in.code == BTN_MOUSE || in.code == BTN_TOUCH) {
+            if(in.code == BTN_MOUSE) {
                 if(in.value == 0) dsc->state = LV_INDEV_STATE_RELEASED;
                 else if(in.value == 1) dsc->state = LV_INDEV_STATE_PRESSED;
+            }
+            else if(in.code == BTN_TOUCH) {
+                if(in.value == 0) {
+                    dsc->state = LV_INDEV_STATE_RELEASED;
+                    dsc->touch_pending = false;
+                    dsc->fresh_position = false;
+                }
+                else if(in.value == 1) {
+                    dsc->touch_pending = true;
+                    if(dsc->fresh_position) dsc->state = LV_INDEV_STATE_PRESSED;
+                }
             }
             else {
                 dsc->key = _evdev_process_key(in.code);
@@ -251,6 +277,9 @@ static void _evdev_read(lv_indev_t * indev, lv_indev_data_t * data)
         }
 #if LV_USE_GESTURE_RECOGNITION
         else if(in.type == EV_SYN && in.code == SYN_REPORT) {
+            if(!dsc->touch_pending && dsc->state == LV_INDEV_STATE_RELEASED) {
+                dsc->fresh_position = false;
+            }
             /* Handle gesture recognition at sync event */
             if(dsc->touch_count > 0 && dsc->touch_data_changed) {
                 LV_LOG_TRACE("=== SYN_REPORT: touch_count=%d ===", dsc->touch_count);
@@ -302,6 +331,12 @@ static void _evdev_read(lv_indev_t * indev, lv_indev_data_t * data)
                 }
 
                 dsc->touch_data_changed = false;
+            }
+        }
+#else
+        else if(in.type == EV_SYN && in.code == SYN_REPORT) {
+            if(!dsc->touch_pending && dsc->state == LV_INDEV_STATE_RELEASED) {
+                dsc->fresh_position = false;
             }
         }
 #endif
