@@ -20,6 +20,7 @@
 namespace {
 constexpr uint32_t kMJPG = v4l2_fourcc('M', 'J', 'P', 'G');
 constexpr uint32_t kYUYV = v4l2_fourcc('Y', 'U', 'Y', 'V');
+constexpr uint16_t kPreviewPort = 9002;
 
 #ifdef CAMERA_LVGL_BOARD
 // 板端传输目标：PC 接收服务
@@ -209,6 +210,7 @@ void AppController::startPreview() {
 
 void AppController::stopPreview() {
     if (recording_.load()) stopRecording();
+    stopNetworkPreview();
     if (previewing_.load() || camera_.isOpen()) {
         camera_.stop();
         camera_.close();
@@ -223,6 +225,47 @@ void AppController::stopPreview() {
         ui_->clearPreview();
         ui_->setStatusText("预览已停止");
     }
+}
+
+void AppController::toggleNetworkPreview() {
+    if (!ui_) return;
+    if (networkPreviewing_.load()) {
+        stopNetworkPreview();
+        ui_->setStatusText("网络预览已停止");
+        return;
+    }
+
+    if (!previewing_.load()) startPreview();
+    if (!previewing_.load() || !pool_) {
+        ui_->setStatusText("网络预览需要先成功启动摄像头", 0xff5555);
+        ui_->setNetworkPreviewState(false, false);
+        return;
+    }
+
+    network_preview::NetworkPreviewService::Config cfg;
+    cfg.host = transferHost_;
+    cfg.port = kPreviewPort;
+    cfg.width = previewW_;
+    cfg.height = previewH_;
+    cfg.maxFps = 20;
+    if (!networkPreview_.start(cfg)) {
+        ui_->setStatusText("网络预览启动失败: " + networkPreview_.lastError(), 0xff5555);
+        ui_->setNetworkPreviewState(false, false);
+        return;
+    }
+
+    networkPreviewing_.store(true);
+    networkConnectedNotified_ = false;
+    ui_->setNetworkPreviewState(true, false);
+    ui_->setStatusText("网络预览已启动，正在连接 PC");
+}
+
+void AppController::stopNetworkPreview() {
+    const bool wasActive = networkPreviewing_.exchange(false);
+    networkConnectedNotified_ = false;
+    networkPreview_.stop();
+    if (ui_) ui_->setNetworkPreviewState(false, false);
+    if (wasActive && ui_) ui_->setStatusText("网络预览已停止");
 }
 
 void AppController::handleFrame(const camera::Frame &frame) {
@@ -242,14 +285,22 @@ void AppController::handleFrame(const camera::Frame &frame) {
 
     if (ok) {
         pool_->publish(idx);
-        if (recording_.load()) {
-            if (frame.pixelformat == kMJPG) {
-                recorder_.pushFrame(frame.data, frame.size);
-            } else if (frame.pixelformat == kYUYV) {
-                if (preview::yuyvToJpeg(frame.data, frame.width, frame.height, jpegEncodeBuf_)) {
-                    recorder_.pushFrame(jpegEncodeBuf_.data(), jpegEncodeBuf_.size());
-                }
-            }
+        const bool needJpeg = recording_.load() || networkPreviewing_.load();
+        const uint8_t *jpegData = nullptr;
+        size_t jpegSize = 0;
+        if (needJpeg && frame.pixelformat == kMJPG) {
+            jpegData = frame.data;
+            jpegSize = frame.size;
+        } else if (needJpeg && frame.pixelformat == kYUYV &&
+                   preview::yuyvToJpeg(frame.data, frame.width, frame.height, jpegEncodeBuf_)) {
+            jpegData = jpegEncodeBuf_.data();
+            jpegSize = jpegEncodeBuf_.size();
+        }
+        if (jpegData && recording_.load()) {
+            recorder_.pushFrame(jpegData, jpegSize);
+        }
+        if (jpegData && networkPreviewing_.load()) {
+            networkPreview_.pushFrame(jpegData, jpegSize);
         }
     } else {
         pool_->release(idx);
@@ -272,6 +323,17 @@ void AppController::tick() {
 
     std::string err = popError();
     if (!err.empty()) ui_->setStatusText(err, 0xff5555);
+
+    if (networkPreviewing_.load()) {
+        const bool connected = networkPreview_.isConnected();
+        ui_->setNetworkPreviewState(true, connected);
+        if (connected && !networkConnectedNotified_) {
+            networkConnectedNotified_ = true;
+            ui_->setStatusText("网络预览直播中", 0x66cc66);
+        } else if (!connected) {
+            networkConnectedNotified_ = false;
+        }
+    }
 
     if (recording_.load()) {
         const std::string recError = recorder_.lastError();

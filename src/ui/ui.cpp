@@ -119,6 +119,18 @@ void Ui::init(lv_display_t *disp, const lv_font_t *fontLarge) {
     lv_obj_set_width(saveDirLabel_, kPanelW - 20);
     lv_obj_align(saveDirLabel_, LV_ALIGN_TOP_LEFT, 0, y + 20);
 
+    networkPreviewBtn_ = lv_button_create(left);
+    lv_obj_set_size(networkPreviewBtn_, kPanelW - 20, 40);
+    lv_obj_align(networkPreviewBtn_, LV_ALIGN_TOP_LEFT, 0, 340);
+    lv_obj_set_style_bg_color(networkPreviewBtn_, lv_color_hex(0x3949AB), 0);
+    lv_obj_t *networkLabel = lv_label_create(networkPreviewBtn_);
+    lv_label_set_text(networkLabel, "网络预览: 关");
+    lv_obj_center(networkLabel);
+    lv_obj_add_event_cb(networkPreviewBtn_, [](lv_event_t *e) {
+        auto *ui = static_cast<Ui *>(lv_event_get_user_data(e));
+        if (ui->onNetworkToggle) ui->onNetworkToggle();
+    }, LV_EVENT_CLICKED, this);
+
     albumBtn_ = lv_button_create(left);
     lv_obj_set_size(albumBtn_, kPanelW - 20, 48);
     lv_obj_align(albumBtn_, LV_ALIGN_TOP_LEFT, 0, 390);
@@ -281,6 +293,30 @@ void Ui::setSaveDirText(const std::string &text) {
 
 void Ui::setPreviewInfoText(const std::string &text) {
     if (previewInfo_) lv_label_set_text(previewInfo_, text.c_str());
+}
+
+void Ui::setNetworkPreviewState(bool active, bool connected) {
+    if (!networkPreviewBtn_) return;
+    lv_obj_t *label = lv_obj_get_child(networkPreviewBtn_, 0);
+    if (!label) return;
+
+    const int state = !active ? 0 : (connected ? 2 : 1);
+    if (state == networkUiState_) return;
+    networkUiState_ = state;
+
+    if (!active) {
+        lv_label_set_text(label, "网络预览: 关");
+        lv_obj_set_style_bg_color(networkPreviewBtn_, lv_color_hex(0x3949AB), 0);
+        return;
+    }
+
+    if (connected) {
+        lv_label_set_text(label, "网络预览: 直播中");
+    } else {
+        lv_label_set_text(label, "网络预览: 连接中");
+    }
+    lv_obj_set_style_bg_color(networkPreviewBtn_,
+                              lv_color_hex(connected ? 0xC62828 : 0x8D6E63), 0);
 }
 
 void Ui::setAlbumFiles(const std::vector<std::vector<std::string>> &rows) {

@@ -15,3 +15,5 @@ cmake-build-*/
 .idea/
 *.swp
 *~
+__pycache__/
+*.pyc

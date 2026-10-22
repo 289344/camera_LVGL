@@ -62,6 +62,7 @@ int main(void) {
     gUi.onCameraSelect = [](int i) { gController.selectCamera(i); };
     gUi.onStartPreview = []() { gController.startPreview(); };
     gUi.onStopPreview = []() { gController.stopPreview(); };
+    gUi.onNetworkToggle = []() { gController.toggleNetworkPreview(); };
     gUi.onRecordToggle = []() { gController.toggleRecording(); };
     gUi.onAlbumOpen = []() { gController.openAlbum(); };
     gUi.onAlbumClose = []() { gController.closeAlbum(); };

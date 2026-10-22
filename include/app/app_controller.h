@@ -11,6 +11,7 @@
 #include "recording/recording_service.h"
 #include "file_manager/file_manager.h"
 #include "file_transfer/file_transfer_service.h"
+#include "network_preview/network_preview_service.h"
 
 class Ui;
 
@@ -28,6 +29,11 @@ public:
     void startPreview();
     void stopPreview();
     bool isPreviewing() const { return previewing_.load(); }
+
+    // 网络实时预览
+    void toggleNetworkPreview();
+    void stopNetworkPreview();
+    bool isNetworkPreviewing() const { return networkPreviewing_.load(); }
 
     // 录像
     void startRecording();
@@ -69,8 +75,10 @@ private:
 
     std::atomic<bool> previewing_{false};
     std::atomic<bool> recording_{false};
+    std::atomic<bool> networkPreviewing_{false};
 
     recording::RecordingService recorder_;
+    network_preview::NetworkPreviewService networkPreview_;
     std::vector<uint8_t> jpegEncodeBuf_;   // 仅采集线程使用
 
     transfer::FileTransferService transfer_;
@@ -78,6 +86,7 @@ private:
     uint32_t previewW_ = 0;
     uint32_t previewH_ = 0;
     int displayedFrame_ = -1;
+    bool networkConnectedNotified_ = false;
 
     std::mutex errMutex_;
     std::string pendingError_;

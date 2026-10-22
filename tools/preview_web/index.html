@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>CAM-Link 实时监控</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <div>
+        <h1>CAM-Link</h1>
+        <p>嵌入式相机实时监控</p>
+      </div>
+    </div>
+    <div id="connectionPill" class="connection-pill is-offline">
+      <span class="status-dot" aria-hidden="true"></span>
+      <span id="connectionText">等待板端推流</span>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="viewer-card" aria-label="实时视频">
+      <div id="videoShell" class="video-shell">
+        <img id="stream" class="stream" alt="板端摄像头实时画面">
+        <div id="placeholder" class="placeholder">
+          <div class="aperture" aria-hidden="true"></div>
+          <h2>等待摄像头画面</h2>
+          <p>在板端先开始预览，再点击“网络预览”</p>
+        </div>
+        <div class="live-badge">
+          <span class="live-dot" aria-hidden="true"></span>
+          LIVE
+        </div>
+      </div>
+      <div class="toolbar">
+        <div class="stream-meta">
+          <span id="resolutionText">-- × --</span>
+          <span class="separator"></span>
+          <span id="sourceText">源地址 --</span>
+        </div>
+        <div class="actions">
+          <button id="snapshotButton" class="button" type="button">保存快照</button>
+          <button id="reconnectButton" class="button" type="button">重新连接</button>
+          <button id="fullscreenButton" class="button button-primary" type="button">全屏查看</button>
+        </div>
+      </div>
+    </section>
+
+    <aside class="side-panel">
+      <section class="panel metrics-panel">
+        <div class="panel-heading">
+          <h2>链路状态</h2>
+          <span id="updatedText" class="muted">正在检测</span>
+        </div>
+        <div class="metrics">
+          <div class="metric">
+            <span class="metric-label">帧率</span>
+            <strong id="fpsText">0.0</strong>
+            <span class="metric-unit">FPS</span>
+          </div>
+          <div class="metric">
+            <span class="metric-label">带宽</span>
+            <strong id="bitrateText">0.0</strong>
+            <span class="metric-unit">kbps</span>
+          </div>
+          <div class="metric">
+            <span class="metric-label">累计帧数</span>
+            <strong id="framesText">0</strong>
+            <span class="metric-unit">帧</span>
+          </div>
+          <div class="metric">
+            <span class="metric-label">在线观看</span>
+            <strong id="viewersText">1</strong>
+            <span class="metric-unit">人</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel help-panel">
+        <h2>启动方式</h2>
+        <ol>
+          <li>在 PC 运行 <code>python3 tools/preview_server.py</code></li>
+          <li>在板端先点击“开始预览”</li>
+          <li>再点击“网络预览”，状态变为“直播中”</li>
+        </ol>
+        <p class="hint">浏览器地址：<strong id="pageAddress">当前页面</strong></p>
+        <p class="hint">板端推流端口 <code>9002/TCP</code>，网页端口 <code>8080/HTTP</code>。画面只在局域网传输，不经过第三方服务。</p>
+      </section>
+    </aside>
+  </main>
+
+  <footer>
+    <span>JPEG 帧流</span>
+    <span>低延迟局域网监控</span>
+    <span id="footerStatus">未连接</span>
+  </footer>
+
+  <script src="/app.js"></script>
+</body>
+</html>

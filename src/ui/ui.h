@@ -19,6 +19,7 @@ public:
     std::function<void(int)> onCameraSelect;
     std::function<void()> onStartPreview;
     std::function<void()> onStopPreview;
+    std::function<void()> onNetworkToggle;
     std::function<void()> onRecordToggle;
     std::function<void()> onAlbumOpen;
     std::function<void()> onAlbumClose;
@@ -32,6 +33,7 @@ public:
     void setRecordState(bool recording, uint32_t seconds);
     void setSaveDirText(const std::string &text);
     void setPreviewInfoText(const std::string &text);
+    void setNetworkPreviewState(bool active, bool connected);
     void setAlbumFiles(const std::vector<std::vector<std::string>> &rows);
     void setAlbumSelection(int row);
     void setAlbumVisible(bool visible);
@@ -58,6 +60,7 @@ private:
     lv_obj_t *cameraDropdown_ = nullptr;
     lv_obj_t *previewBtn_ = nullptr;
     lv_obj_t *stopPreviewBtn_ = nullptr;
+    lv_obj_t *networkPreviewBtn_ = nullptr;
     lv_obj_t *recordBtn_ = nullptr;
     lv_obj_t *albumBtn_ = nullptr;
     lv_obj_t *albumPage_ = nullptr;
@@ -81,4 +84,5 @@ private:
     int selectedFile_ = -1;
     int lastClickedFile_ = -1;
     uint32_t lastClickTick_ = 0;
+    int networkUiState_ = -1;
 };
