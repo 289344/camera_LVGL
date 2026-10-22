@@ -42,6 +42,9 @@ public:
     void setTransferProgress(int percent);
     void setTransferStatus(const std::string &text, uint32_t color = 0xcccccc);
 
+    /** 递归标记整个 UI 树需要重绘。*/
+    void refreshAll();
+
     // 预览帧
     void setPreviewFrame(const uint8_t *rgb565, uint32_t w, uint32_t h);
     void clearPreview();
@@ -85,4 +88,6 @@ private:
     int lastClickedFile_ = -1;
     uint32_t lastClickTick_ = 0;
     int networkUiState_ = -1;
+    bool recordButtonState_ = false;
+    bool recordButtonStateInitialized_ = false;
 };

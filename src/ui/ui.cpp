@@ -12,6 +12,15 @@ constexpr int kPanelW = 280;
 constexpr int kCenterW = kWinW - kPanelW;
 constexpr uint32_t kDoubleClickMs = 450;
 
+void invalidateTree(lv_obj_t *obj) {
+    if (!obj) return;
+    lv_obj_invalidate(obj);
+    const uint32_t childCount = lv_obj_get_child_count(obj);
+    for (uint32_t i = 0; i < childCount; ++i) {
+        invalidateTree(lv_obj_get_child(obj, i));
+    }
+}
+
 void onCameraDropdown(lv_event_t *e) {
     auto *ui = static_cast<Ui *>(lv_event_get_user_data(e));
     if (ui->onCameraSelect) {
@@ -255,6 +264,10 @@ void Ui::init(lv_display_t *disp, const lv_font_t *fontLarge) {
     setTransferEnabled(false);
 }
 
+void Ui::refreshAll() {
+    if (screen_) invalidateTree(screen_);
+}
+
 void Ui::setCameraList(const std::vector<std::string> &paths, int selected) {
     if (!cameraDropdown_) return;
     std::string options;
@@ -307,6 +320,7 @@ void Ui::setNetworkPreviewState(bool active, bool connected) {
     if (!active) {
         lv_label_set_text(label, "网络预览: 关");
         lv_obj_set_style_bg_color(networkPreviewBtn_, lv_color_hex(0x3949AB), 0);
+        refreshAll();
         return;
     }
 
@@ -317,6 +331,10 @@ void Ui::setNetworkPreviewState(bool active, bool connected) {
     }
     lv_obj_set_style_bg_color(networkPreviewBtn_,
                               lv_color_hex(connected ? 0xC62828 : 0x8D6E63), 0);
+
+    // 状态切换时强制重绘整棵 UI 树，避免板端 framebuffer 留下旧画面或只显示
+    // 发生变化的按钮。正常预览帧仍只刷新中央图像，不影响帧率。
+    refreshAll();
 }
 
 void Ui::setAlbumFiles(const std::vector<std::vector<std::string>> &rows) {
@@ -431,6 +449,7 @@ void Ui::setAlbumVisible(bool visible) {
         lv_obj_add_flag(albumPage_, LV_OBJ_FLAG_HIDDEN);
         lastClickedFile_ = -1;
     }
+    refreshAll();
 }
 
 void Ui::setAlbumHint(const std::string &text, uint32_t color) {
@@ -514,10 +533,18 @@ void Ui::setTransferEnabled(bool enabled) {
 }
 
 void Ui::setRecordButtons(bool recording) {
-    if (recordBtn_) {
-        lv_obj_t *label = lv_obj_get_child(recordBtn_, 0);
-        lv_label_set_text(label, recording ? "停止录像" : "开始录像");
-    }
+    if (!recordBtn_) return;
+
+    const bool changed = !recordButtonStateInitialized_ || recording != recordButtonState_;
+    recordButtonStateInitialized_ = true;
+    recordButtonState_ = recording;
+    if (!changed) return;
+
+    lv_obj_t *label = lv_obj_get_child(recordBtn_, 0);
+    if (label) lv_label_set_text(label, recording ? "停止录像" : "开始录像");
+    // 录像状态切换是用户可见的关键状态；整屏重绘可修复板端静态控件
+    // 在外部 framebuffer 操作后消失的问题。
+    refreshAll();
 }
 
 int Ui::selectedCameraIndex() const {

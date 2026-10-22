@@ -11,6 +11,16 @@ static AppController gController;
 static uint32_t gDisplayAwakeCounter = 0;
 #endif
 
+static void refreshUi(lv_display_t *disp) {
+    gUi.refreshAll();
+    lv_refr_now(disp);
+#ifdef CAMERA_LVGL_BOARD
+    // 板端 DIRECT 模式的后备缓冲保存完整 UI，立即同步可覆盖任何外部程序
+    // 残留在 framebuffer 中的画面。
+    board::restoreDisplayFromBackBuffer();
+#endif
+}
+
 static void uiTick(lv_timer_t *timer) {
     (void)timer;
     gController.tick();
@@ -71,8 +81,7 @@ int main(void) {
     gUi.onFileActivate = [](int) { gController.playSelectedFile(); };
 
     // 首帧强制完整绘制。自定义 fbdev 驱动不会在进程启动时自动清空整个画面。
-    lv_obj_invalidate(lv_screen_active());
-    lv_refr_now(disp);
+    refreshUi(disp);
 
     lv_timer_create(uiTick, 33, nullptr);  // ~30fps 的 UI 刷新
 
@@ -81,8 +90,7 @@ int main(void) {
         gController.pollPlayback();
         if (wasPlaying && !gController.isPlayingVideo()) {
             // 外部播放器直接写 /dev/fb0，结束后强制完整重绘相机界面。
-            board::keepDisplayAwake();
-            lv_obj_invalidate(lv_screen_active());
+            refreshUi(disp);
         }
         if (gController.isPlayingVideo()) {
             // 播放器占用同一 framebuffer 时暂停 LVGL 刷新和触摸处理，避免画面互相覆盖。
