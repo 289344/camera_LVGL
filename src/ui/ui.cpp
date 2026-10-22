@@ -12,15 +12,6 @@ constexpr int kPanelW = 280;
 constexpr int kCenterW = kWinW - kPanelW;
 constexpr uint32_t kDoubleClickMs = 450;
 
-void invalidateTree(lv_obj_t *obj) {
-    if (!obj) return;
-    lv_obj_invalidate(obj);
-    const uint32_t childCount = lv_obj_get_child_count(obj);
-    for (uint32_t i = 0; i < childCount; ++i) {
-        invalidateTree(lv_obj_get_child(obj, i));
-    }
-}
-
 void onCameraDropdown(lv_event_t *e) {
     auto *ui = static_cast<Ui *>(lv_event_get_user_data(e));
     if (ui->onCameraSelect) {
@@ -265,7 +256,9 @@ void Ui::init(lv_display_t *disp, const lv_font_t *fontLarge) {
 }
 
 void Ui::refreshAll() {
-    if (screen_) invalidateTree(screen_);
+    if (!screen_) return;
+    lv_area_t fullArea = {0, 0, kWinW - 1, kWinH - 1};
+    lv_obj_invalidate_area(screen_, &fullArea);
 }
 
 void Ui::setCameraList(const std::vector<std::string> &paths, int selected) {

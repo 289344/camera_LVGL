@@ -12,13 +12,18 @@ static uint32_t gDisplayAwakeCounter = 0;
 #endif
 
 static void refreshUi(lv_display_t *disp) {
+    // 临时切到 FULL 模式，确保 LVGL 真正从根对象开始重绘整个屏幕。
+    // 不能直接复制 DIRECT 后备缓冲：首次启动或局部刷新后，后备缓冲中
+    // 可能仍有未初始化区域，直接复制会把按钮区域覆盖成黑色。
+    const lv_display_render_mode_t oldMode = lv_display_get_render_mode(disp);
+    if (oldMode != LV_DISPLAY_RENDER_MODE_FULL) {
+        lv_display_set_render_mode(disp, LV_DISPLAY_RENDER_MODE_FULL);
+    }
     gUi.refreshAll();
     lv_refr_now(disp);
-#ifdef CAMERA_LVGL_BOARD
-    // 板端 DIRECT 模式的后备缓冲保存完整 UI，立即同步可覆盖任何外部程序
-    // 残留在 framebuffer 中的画面。
-    board::restoreDisplayFromBackBuffer();
-#endif
+    if (oldMode != LV_DISPLAY_RENDER_MODE_FULL) {
+        lv_display_set_render_mode(disp, oldMode);
+    }
 }
 
 static void uiTick(lv_timer_t *timer) {
