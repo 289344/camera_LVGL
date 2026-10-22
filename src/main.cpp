@@ -55,12 +55,31 @@ int main(void) {
     gUi.onStartPreview = []() { gController.startPreview(); };
     gUi.onStopPreview = []() { gController.stopPreview(); };
     gUi.onRecordToggle = []() { gController.toggleRecording(); };
+    gUi.onAlbumOpen = []() { gController.openAlbum(); };
+    gUi.onAlbumClose = []() { gController.closeAlbum(); };
     gUi.onTransfer = []() { gController.transferSelectedFile(); };
     gUi.onFileSelect = [](int row) { gController.selectFile(row); };
+    gUi.onFileActivate = [](int) { gController.playSelectedFile(); };
+
+    // 首帧强制完整绘制。自定义 fbdev 驱动不会在进程启动时自动清空整个画面。
+    lv_obj_invalidate(lv_screen_active());
+    lv_refr_now(disp);
 
     lv_timer_create(uiTick, 33, nullptr);  // ~30fps 的 UI 刷新
 
     while (1) {
+        const bool wasPlaying = gController.isPlayingVideo();
+        gController.pollPlayback();
+        if (wasPlaying && !gController.isPlayingVideo()) {
+            // 外部播放器直接写 /dev/fb0，结束后强制完整重绘相机界面。
+            lv_obj_invalidate(lv_screen_active());
+        }
+        if (gController.isPlayingVideo()) {
+            // 播放器占用同一 framebuffer 时暂停 LVGL 刷新和触摸处理，避免画面互相覆盖。
+            lv_delay_ms(30);
+            continue;
+        }
+
         uint32_t delay = lv_timer_handler();
         if (delay > 100) delay = 100;
         if (delay < 1) delay = 1;

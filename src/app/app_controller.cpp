@@ -1,8 +1,15 @@
 #include "app/app_controller.h"
 
 #include <algorithm>
+#include <cerrno>
 #include <climits>
+#include <csignal>
+#include <cstdlib>
+#include <fcntl.h>
+#include <fstream>
 #include <linux/videodev2.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 #include "ui/ui.h"
 #include "preview/pixel_converter.h"
@@ -15,19 +22,45 @@ constexpr uint32_t kYUYV = v4l2_fourcc('Y', 'U', 'Y', 'V');
 
 #ifdef CAMERA_LVGL_BOARD
 // 板端传输目标：PC 接收服务
-constexpr const char *kTransferHost = "10.151.16.82";
+constexpr const char *kDefaultTransferHost = "10.151.36.173";
 constexpr uint16_t kTransferPort = 9000;
 #endif
+
+std::string loadTransferHost() {
+#ifdef CAMERA_LVGL_BOARD
+    const char *envHost = std::getenv("CAMERA_SERVER_IP");
+    if (envHost && *envHost) return envHost;
+
+    std::ifstream cfg("/root/camera_lvgl/server_ip.txt");
+    std::string host;
+    if (cfg && std::getline(cfg, host)) {
+        const size_t first = host.find_first_not_of(" \t\r\n");
+        const size_t last = host.find_last_not_of(" \t\r\n");
+        if (first != std::string::npos) {
+            return host.substr(first, last - first + 1);
+        }
+    }
+    return kDefaultTransferHost;
+#else
+    return "127.0.0.1";
+#endif
+}
 }  // namespace
 
 AppController::AppController() {
     // 默认目录：项目根目录下的 recordings / received
     recordingsDir_ = "recordings";
     receivedDir_ = "received";
+    transferHost_ = loadTransferHost();
 }
 
 AppController::~AppController() {
     stopPreview();
+    if (playbackPid_ > 0) {
+        ::kill(static_cast<pid_t>(playbackPid_), SIGTERM);
+        ::waitpid(static_cast<pid_t>(playbackPid_), nullptr, 0);
+        playbackPid_ = -1;
+    }
 }
 
 void AppController::init(Ui *ui) {
@@ -280,25 +313,129 @@ void AppController::toggleRecording() {
     else startRecording();
 }
 
+void AppController::openAlbum() {
+    if (!ui_) return;
+    // 浏览相册或播放录像时释放摄像头，避免采集、录像线程和播放器同时抢占资源。
+    if (previewing_.load() || camera_.isOpen()) stopPreview();
+    refreshFileList();
+}
+
+void AppController::closeAlbum() {
+    // 相册关闭后保持相机停止状态，由用户按需重新开始预览。
+}
+
 void AppController::refreshFileList() {
+    const std::string wantedPath = selectedFilePath_;
     files_ = filemanager::FileManager::list(recordingsDir_);
+    selectedFile_ = -1;
+    if (!wantedPath.empty()) {
+        auto it = std::find_if(files_.begin(), files_.end(), [&wantedPath](const auto &f) {
+            return f.path == wantedPath;
+        });
+        if (it != files_.end()) selectedFile_ = static_cast<int>(it - files_.begin());
+    }
+    if (selectedFile_ < 0) selectedFilePath_.clear();
     if (!ui_) return;
     std::vector<std::vector<std::string>> rows;
     rows.reserve(files_.size());
     for (const auto &f : files_) {
         rows.push_back({f.name, filemanager::FileManager::formatSize(f.size), f.created});
     }
-    ui_->setFileTable(rows);
-    if (selectedFile_ >= static_cast<int>(files_.size())) {
-        selectedFile_ = -1;
-        ui_->setTransferEnabled(false);
-    }
+    ui_->setAlbumFiles(rows);
+    ui_->setAlbumSelection(selectedFile_);
 }
 
 void AppController::selectFile(int row) {
     selectedFile_ = row;
+    if (row >= 0 && row < static_cast<int>(files_.size())) {
+        selectedFilePath_ = files_[row].path;
+    } else {
+        selectedFilePath_.clear();
+    }
     if (ui_) {
         ui_->setTransferEnabled(row >= 0 && row < static_cast<int>(files_.size()));
+    }
+}
+
+void AppController::playSelectedFile() {
+    if (!ui_) return;
+    if (playbackPid_ > 0) {
+        ui_->setAlbumHint("已有视频正在播放", 0xffaa44);
+        return;
+    }
+    if (transfer_.isTransferring()) {
+        ui_->setAlbumHint("传输中，暂不能播放", 0xffaa44);
+        return;
+    }
+    if (selectedFile_ < 0 || selectedFile_ >= static_cast<int>(files_.size())) {
+        ui_->setAlbumHint("请先单击选中录像", 0xffaa44);
+        return;
+    }
+
+    const std::string path = files_[selectedFile_].path;
+    if (previewing_.load() || camera_.isOpen()) stopPreview();
+
+#ifdef CAMERA_LVGL_BOARD
+    const pid_t pid = ::fork();
+    if (pid == 0) {
+        int logFd = ::open("/tmp/camera_playback.log", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (logFd >= 0) {
+            ::dup2(logFd, STDOUT_FILENO);
+            ::dup2(logFd, STDERR_FILENO);
+            if (logFd > STDERR_FILENO) ::close(logFd);
+        }
+
+        const std::string source = "location=" + path;
+        ::execl("/usr/bin/gst-launch-1.0", "gst-launch-1.0", "-q", "-e",
+                "filesrc", source.c_str(), "!", "decodebin", "!",
+                "videoconvert", "!", "videoscale", "!",
+                "video/x-raw,width=1024,height=600", "!",
+                "fbdevsink", "device=/dev/fb0", static_cast<char *>(nullptr));
+        ::_exit(127);
+    }
+#else
+    const pid_t pid = ::fork();
+    if (pid == 0) {
+        int logFd = ::open("/tmp/camera_playback.log", O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (logFd >= 0) {
+            ::dup2(logFd, STDOUT_FILENO);
+            ::dup2(logFd, STDERR_FILENO);
+            if (logFd > STDERR_FILENO) ::close(logFd);
+        }
+        ::execlp("gst-play-1.0", "gst-play-1.0", "-q", "--no-interactive",
+                 path.c_str(), static_cast<char *>(nullptr));
+        ::_exit(127);
+    }
+#endif
+
+    if (pid < 0) {
+        playbackPid_ = -1;
+        ui_->setAlbumHint("播放器启动失败", 0xff5555);
+        ui_->setStatusText("播放器启动失败", 0xff5555);
+        return;
+    }
+
+    playbackPid_ = static_cast<int>(pid);
+    ui_->setAlbumHint("正在全屏播放: " + files_[selectedFile_].name, 0x66cc66);
+    ui_->setStatusText("正在播放录像", 0x66cc66);
+}
+
+void AppController::pollPlayback() {
+    if (playbackPid_ <= 0 || !ui_) return;
+
+    int status = 0;
+    const pid_t result = ::waitpid(static_cast<pid_t>(playbackPid_), &status, WNOHANG);
+    if (result == 0) return;
+    if (result < 0 && errno != ECHILD) return;
+
+    playbackPid_ = -1;
+    const bool success = result > 0 && WIFEXITED(status) && WEXITSTATUS(status) == 0;
+    if (success) {
+        ui_->setAlbumHint("播放结束，单击选中，双击播放", 0x66cc66);
+        ui_->setStatusText("录像播放结束", 0x66cc66);
+    } else {
+        ui_->setAlbumHint("播放失败，请查看 /tmp/camera_playback.log", 0xff5555);
+        ui_->setStatusText("录像播放失败", 0xff5555);
     }
 }
 
@@ -315,7 +452,7 @@ void AppController::transferSelectedFile() {
 
     const std::string &src = files_[selectedFile_].path;
 #ifdef CAMERA_LVGL_BOARD
-    const bool started = transfer_.startTcp(src, kTransferHost, kTransferPort);
+    const bool started = transfer_.startTcp(src, transferHost_, kTransferPort);
 #else
     const bool started = transfer_.start(src, receivedDir_);
 #endif

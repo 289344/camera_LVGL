@@ -36,8 +36,13 @@ public:
     bool isRecording() const { return recording_.load(); }
 
     // 文件管理
+    void openAlbum();
+    void closeAlbum();
     void refreshFileList();
     void selectFile(int row);
+    void playSelectedFile();
+    void pollPlayback();
+    bool isPlayingVideo() const { return playbackPid_ > 0; }
     const std::vector<filemanager::FileInfo> &files() const { return files_; }
 
     // 文件传输（后续阶段实现）
@@ -79,8 +84,12 @@ private:
 
     std::string recordingsDir_;
     std::string receivedDir_;
+    std::string transferHost_;
+
+    int playbackPid_ = -1;
 
     std::vector<filemanager::FileInfo> files_;
+    std::string selectedFilePath_;
     int selectedFile_ = -1;
     uint32_t fileRefreshCounter_ = 0;
 };

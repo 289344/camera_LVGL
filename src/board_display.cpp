@@ -109,6 +109,8 @@ lv_display_t *createDisplay() {
         lv_display_delete(disp);
         return nullptr;
     }
+    // 进程重启时 framebuffer 会保留上一进程的画面；先清屏，避免旧 UI 残留。
+    std::memset(map, 0, finfo.smem_len);
 
     FbContext *ctx = new FbContext();
     ctx->fd = fd;

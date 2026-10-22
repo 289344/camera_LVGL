@@ -7,8 +7,8 @@
 - 通过 V4L2 访问 `/dev/video0`、`/dev/video1`
 - 摄像头实时预览（支持 MJPG / YUYV，自动像素格式转换与缩放）
 - 开始 / 停止录像（MJPEG 封装为 AVI，后台线程写入，不阻塞 UI）
-- 本地录像文件列表（文件名、大小、时间）
-- 本机文件传输（异步复制到另一个目录，显示进度与结果）
+- 录像相册（单击选中、双击全屏播放）
+- 通过 TCP 将选中的录像传输到服务器（显示进度与结果）
 
 ## 环境要求
 
@@ -43,8 +43,9 @@ cmake --build build -j"$(nproc)"
 1. 在左上角下拉框选择摄像头（`/dev/video0` 或 `/dev/video1`）。
 2. 点击 **Start Preview** 开始预览，**Stop Preview** 停止预览。
 3. 点击 **Start Recording** 开始录像，再次点击 **Stop Recording** 停止录像。
-4. 录像文件默认保存到项目根目录 `recordings/`，右侧面板会自动刷新列表。
-5. 在列表中选择一个文件，点击 **Transfer** 将其复制到项目根目录 `received/`。
+4. 录像文件默认保存到项目根目录 `recordings/`。
+5. 点击左侧 **相册** 进入录像列表；单击文件进行选中，双击文件全屏播放。
+6. 选中录像后点击相册右下角的 **传输到服务器**，将文件发送到 PC 接收服务。
 
 ## 目录结构
 
@@ -88,7 +89,7 @@ g++ -std=c++17 -O2 -Iinclude -Isrc tests/test_record.cpp \
 ## 注意事项
 
 - 录像与传输默认使用相对目录 `recordings/`、`received/`，如需修改可在 `src/app/app_controller.cpp` 的构造函数中调整。
-- 当前仅实现 PC 本机文件传输；板端网络传输接口将在后续阶段补充。
+- PC 版传输到本机 `received/`；板端通过 TCP 传输到服务器。
 - 界面为中文，使用 FreeType 渲染 CJK 字体；字体随工程打包于 `assets/fonts/`，缺失时自动回退到系统字体。
 
 ## 板端交叉编译（i.MX6ULL / Buildroot）
@@ -117,7 +118,9 @@ adb shell 'chmod +x /root/camera_lvgl/camera_lvgl'
 adb shell 'cd /root/camera_lvgl && setsid nohup ./camera_lvgl > /tmp/camera_lvgl.log 2>&1 < /dev/null &'
 ```
 
-板端录像文件保存在 `/root/camera_lvgl/recordings/`。点击界面中的 **Transfer** 后，板子会通过 TCP 把文件发送到 PC 的 `received/` 目录。
+板端录像文件保存在 `/root/camera_lvgl/recordings/`。点击相册右下角的 **传输到服务器** 后，板子会通过 TCP 把文件发送到 PC 的 `received/` 目录。
+
+相册中的录像使用板端 GStreamer（`gst-launch-1.0` + `fbdevsink`）全屏播放。双击影片后 LVGL 会暂停刷新，播放结束或失败后自动恢复相册画面；播放日志位于 `/tmp/camera_playback.log`。
 
 PC 端接收服务：
 
@@ -125,7 +128,14 @@ PC 端接收服务：
 ./tools/pc_receiver.py
 ```
 
-默认监听 `0.0.0.0:9000`，接收目录为项目根目录 `received/`。传输目标 PC 地址当前编译在 `src/app/app_controller.cpp` 中，默认 `10.151.16.82:9000`，如需修改请修改后再重新执行板端编译。
+默认监听 `0.0.0.0:9000`，接收目录为项目根目录 `received/`。板端默认传输目标为 `10.151.36.173:9000`。服务器 IP 变化时无需重新编译，可直接在板端修改：
+
+```bash
+adb shell 'echo 10.151.36.173 > /root/camera_lvgl/server_ip.txt'
+adb shell '/etc/init.d/S99camera restart'
+```
+
+也可以通过环境变量 `CAMERA_SERVER_IP` 覆盖配置文件。传输前请确认板端已有 IPv4 地址并且可以 ping 通服务器。
 
 ## 板端开机自启动
 
