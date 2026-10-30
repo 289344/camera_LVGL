@@ -141,7 +141,9 @@ adb shell '/etc/init.d/S99camera restart'
 
 录音问题可查看 `/tmp/camera_recording.log`。
 
-相册中的录像使用板端 GStreamer（`playbin` + `fbdevsink` + `alsasink`）全屏播放，画面通过黑边适配 1024×600，AAC 音频输出到麦克风所属的 USB 声卡。双击影片后 LVGL 会暂停刷新，播放结束或失败后自动恢复相册画面；播放日志位于 `/tmp/camera_playback.log`。
+相册中的录像使用板端 GStreamer（`playbin` + `fbdevsink` + `alsasink`）全屏播放，640×480 画面以原尺寸居中，AAC 音频输出到麦克风所属的 USB 声卡。双击影片后 LVGL 会暂停刷新，播放结束或失败后自动恢复相册画面；播放中轻触屏幕即可退出。退出请求异步处理，播放器超过 1 秒不响应时强制结束，避免界面一直等待。播放日志位于 `/tmp/camera_playback.log`。
+
+板端直接转换为 framebuffer 使用的 BGRx 格式，播放前仅清屏一次，再由 `fbdevsink` 居中显示，不再逐帧用 `videobox` 补成 1024×600。视频 sink 的迟到容限从默认 5 毫秒调整为 200 毫秒，避免单核板上正常解码耗时导致大量画面被丢弃；保留 QoS 以丢弃启动时积压的过期帧，避免播放越来越慢。同时关闭不需要的软件色彩平衡和去隔行处理。
 
 相册的 `recordings/...` 路径会先解析为绝对路径，再转换为经过百分号编码的 `file:///...` URI，支持空格、中文和 `#` 等文件名字符。不能直接把相对路径拼到 `file://` 后，否则 GStreamer 会把目录当作主机名，报文件不存在。
 
@@ -154,6 +156,14 @@ g++ -std=c++14 -O2 -Wall -Wextra -Iinclude tests/test_playback_uri.cpp \
     src/fs_compat.cpp src/file_manager/file_manager.cpp -o /tmp/test_playback_uri
 /tmp/test_playback_uri
 ```
+
+ADB 连续画面回归测试：在板端双击一段有明显运动的录像（至少 10 秒），等画面开始后执行：
+
+```bash
+python3 tests/test_board_playback_frames.py
+```
+
+测试只读 framebuffer 中央四行，要求 6 秒内至少采样到 10 次画面变化，防止把“进程正常结束”误判为“视频正常显示”。静止画面不适合该测试，采样变化次数也不等于实际播放帧率。
 
 板端内核默认启用只读参数 `consoleblank=600`。开机守护脚本 `camera_supervisor.sh` 会每秒解除 framebuffer blank，因此相册空闲、录像播放结束或主程序异常退出时都不会永久熄屏；相机进程异常退出后也会在 1～2 秒内自动重启。主程序自身仍每 5 秒发送一次 `FBIOBLANK(UNBLANK)` 作为第二层保护。
 

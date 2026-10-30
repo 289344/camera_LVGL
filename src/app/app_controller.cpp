@@ -19,6 +19,7 @@
 #include "file_manager/file_manager.h"
 #include "file_transfer/file_transfer_service.h"
 #include "fs_compat.h"
+#include "board_display.h"
 
 namespace {
 constexpr uint32_t kMJPG = v4l2_fourcc('M', 'J', 'P', 'G');
@@ -567,11 +568,13 @@ void AppController::playSelectedFile() {
         return;
     }
     const std::string uri = "uri=" + fileUri;
-    // 640x480 视频用黑边居中到 1024x600，避免软件放大消耗有限的 CPU。
+    // 直接转换为 framebuffer 的 BGRx，交给 fbdevsink 原尺寸居中。
+    // 逐帧 videobox 补边及默认 5ms 迟到丢帧会使单核板只显示零星画面。
     const std::string videoSinkOption =
-        "video-sink=videoconvert ! videobox left=-192 right=-192 top=-60 bottom=-60 fill=black ! "
-        "video/x-raw,width=1024,height=600 ! fbdevsink device=/dev/fb0";
+        "video-sink=videoconvert ! video/x-raw,format=BGRx ! "
+        "fbdevsink device=/dev/fb0 max-lateness=200000000 qos=true";
     const std::string audioSinkOption = "audio-sink=alsasink device=" + audioDevice_;
+    board::setPlaybackActive(true);
     const pid_t pid = ::fork();
     if (pid == 0) {
         int logFd = ::open("/tmp/camera_playback.log", O_WRONLY | O_CREAT | O_TRUNC, 0644);
@@ -582,7 +585,7 @@ void AppController::playSelectedFile() {
         }
 
         ::execl("/usr/bin/gst-launch-1.0", "gst-launch-1.0", "-q",
-                "playbin", uri.c_str(), videoSinkOption.c_str(),
+                "playbin", "flags=video+audio+soft-volume", uri.c_str(), videoSinkOption.c_str(),
                 audioSinkOption.c_str(), static_cast<char *>(nullptr));
         ::perror("启动 gst-launch-1.0 失败");
         ::_exit(127);
@@ -603,6 +606,7 @@ void AppController::playSelectedFile() {
 #endif
 
     if (pid < 0) {
+        board::setPlaybackActive(false);
         playbackPid_ = -1;
         ui_->setAlbumHint("播放器启动失败", 0xff5555);
         ui_->setStatusText("播放器启动失败", 0xff5555);
@@ -610,8 +614,16 @@ void AppController::playSelectedFile() {
     }
 
     playbackPid_ = static_cast<int>(pid);
+    playbackStopRequested_ = false;
     ui_->setAlbumHint("正在全屏播放: " + files_[selectedFile_].name, 0x66cc66);
     ui_->setStatusText("正在播放录像", 0x66cc66);
+}
+
+void AppController::stopPlayback() {
+    if (playbackPid_ <= 0 || playbackStopRequested_) return;
+    playbackStopRequested_ = true;
+    playbackStopTime_ = std::chrono::steady_clock::now();
+    ::kill(static_cast<pid_t>(playbackPid_), SIGTERM);
 }
 
 void AppController::pollPlayback() {
@@ -619,12 +631,24 @@ void AppController::pollPlayback() {
 
     int status = 0;
     const pid_t result = ::waitpid(static_cast<pid_t>(playbackPid_), &status, WNOHANG);
-    if (result == 0) return;
+    if (result == 0) {
+        // 退出不阻塞 GUI；即使播放器卡在解码或音频驱动，也能返回相册。
+        if (playbackStopRequested_ &&
+            std::chrono::steady_clock::now() - playbackStopTime_ > std::chrono::seconds(1)) {
+            ::kill(static_cast<pid_t>(playbackPid_), SIGKILL);
+        }
+        return;
+    }
     if (result < 0 && errno != ECHILD) return;
 
     playbackPid_ = -1;
+    board::setPlaybackActive(false);
     const bool success = result > 0 && WIFEXITED(status) && WEXITSTATUS(status) == 0;
-    if (success) {
+    if (playbackStopRequested_) {
+        playbackStopRequested_ = false;
+        ui_->setAlbumHint("已退出播放，双击播放，播放时轻触退出", 0x66cc66);
+        ui_->setStatusText("已退出录像播放");
+    } else if (success) {
         ui_->setAlbumHint("播放结束，单击选中，双击播放", 0x66cc66);
         ui_->setStatusText("录像播放结束", 0x66cc66);
     } else {

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <chrono>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -49,6 +50,7 @@ public:
     void refreshFileList();
     void selectFile(int row);
     void playSelectedFile();
+    void stopPlayback();
     void pollPlayback();
     bool isPlayingVideo() const { return playbackPid_ > 0; }
     const std::vector<filemanager::FileInfo> &files() const { return files_; }
@@ -104,6 +106,8 @@ private:
     std::string audioDevice_;
 
     int playbackPid_ = -1;
+    bool playbackStopRequested_ = false;
+    std::chrono::steady_clock::time_point playbackStopTime_;
 
     std::vector<filemanager::FileInfo> files_;
     std::string selectedFilePath_;

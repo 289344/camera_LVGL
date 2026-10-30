@@ -198,7 +198,7 @@ void Ui::init(lv_display_t *disp, const lv_font_t *fontLarge) {
     lv_obj_align(albumTitle, LV_ALIGN_CENTER, 0, 0);
 
     albumHintLabel_ = lv_label_create(albumPage_);
-    lv_label_set_text(albumHintLabel_, "单击选中，双击播放");
+    lv_label_set_text(albumHintLabel_, "单击选中，双击播放；播放时轻触屏幕退出");
     lv_obj_set_style_text_color(albumHintLabel_, lv_color_hex(0x999999), 0);
     lv_obj_align(albumHintLabel_, LV_ALIGN_TOP_LEFT, 22, 76);
 

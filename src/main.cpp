@@ -90,6 +90,9 @@ int main(void) {
 
     lv_timer_create(uiTick, 33, nullptr);  // ~30fps 的 UI 刷新
 
+#ifdef CAMERA_LVGL_BOARD
+    bool playbackTouchArmed = false;
+#endif
     while (1) {
         const bool wasPlaying = gController.isPlayingVideo();
         gController.pollPlayback();
@@ -98,10 +101,30 @@ int main(void) {
             refreshUi(disp);
         }
         if (gController.isPlayingVideo()) {
-            // 播放器占用同一 framebuffer 时暂停 LVGL 刷新和触摸处理，避免画面互相覆盖。
+            // 不分发相册按钮事件，但继续读取触摸，轻触即可退出外部播放器。
+#ifdef CAMERA_LVGL_BOARD
+            if (touch) {
+                lv_indev_data_t data;
+                lv_memzero(&data, sizeof(data));
+                lv_indev_read_cb_t readCb = lv_indev_get_read_cb(touch);
+                if (readCb) {
+                    readCb(touch, &data);
+                    if (data.state == LV_INDEV_STATE_RELEASED) playbackTouchArmed = true;
+                    else if (playbackTouchArmed) {
+                        gController.stopPlayback();
+                        playbackTouchArmed = false;
+                        // 这次退出触摸不能再落到恢复后的相册按钮上。
+                        lv_indev_wait_release(touch);
+                    }
+                }
+            }
+#endif
             lv_delay_ms(30);
             continue;
         }
+#ifdef CAMERA_LVGL_BOARD
+        playbackTouchArmed = false;
+#endif
 
         uint32_t delay = lv_timer_handler();
         if (delay > 100) delay = 100;

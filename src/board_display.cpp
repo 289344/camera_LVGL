@@ -42,13 +42,14 @@ struct FbContext {
     uint8_t *drawBuf = nullptr;
     uint32_t lineLength = 0;
     uint32_t mapSize = 0;
+    bool playbackActive = false;
 };
 
-int gActiveFbFd = -1;
+FbContext *gActiveFb = nullptr;
 
 void flushCb(lv_display_t *disp, const lv_area_t *area, uint8_t *color) {
     FbContext *ctx = static_cast<FbContext *>(lv_display_get_driver_data(disp));
-    if (!ctx || !ctx->map) {
+    if (!ctx || !ctx->map || ctx->playbackActive) {
         lv_display_flush_ready(disp);
         return;
     }
@@ -79,7 +80,7 @@ void deleteCb(lv_event_t *e) {
 
     if (ctx->map) ::munmap(ctx->map, ctx->mapSize);
     if (ctx->fd >= 0) {
-        if (gActiveFbFd == ctx->fd) gActiveFbFd = -1;
+        if (gActiveFb == ctx) gActiveFb = nullptr;
         ::close(ctx->fd);
     }
     std::free(ctx->drawBuf);
@@ -150,16 +151,26 @@ lv_display_t *createDisplay() {
     lv_display_set_flush_cb(disp, flushCb);
     lv_display_add_event_cb(disp, deleteCb, LV_EVENT_DELETE, nullptr);
     lv_display_set_buffers(disp, drawBuf, nullptr, bufSize, LV_DISPLAY_RENDER_MODE_DIRECT);
-    gActiveFbFd = fd;
+    gActiveFb = ctx;
 
     return disp;
 }
 
 void keepDisplayAwake() {
-    if (gActiveFbFd < 0) return;
+    if (!gActiveFb) return;
     // 板端 fbcon 默认 consoleblank=600，且该内核参数只读。
     // 周期性解除 blank，避免相册空闲或播放结束后 LCD 一直黑屏。
-    ::ioctl(gActiveFbFd, FBIOBLANK, FB_BLANK_UNBLANK);
+    ::ioctl(gActiveFb->fd, FBIOBLANK, FB_BLANK_UNBLANK);
+}
+
+void setPlaybackActive(bool active) {
+    if (!gActiveFb) return;
+    gActiveFb->playbackActive = active;
+    if (active) {
+        // fbdevsink 会居中显示原尺寸画面；黑边只需清一次，不必逐帧补边。
+        std::memset(gActiveFb->map, 0, gActiveFb->mapSize);
+        keepDisplayAwake();
+    }
 }
 
 }  // namespace board
@@ -173,6 +184,7 @@ lv_display_t *createDisplay() {
 }
 
 void keepDisplayAwake() {}
+void setPlaybackActive(bool) {}
 
 }  // namespace board
 
