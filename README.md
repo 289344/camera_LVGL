@@ -143,6 +143,18 @@ adb shell '/etc/init.d/S99camera restart'
 
 相册中的录像使用板端 GStreamer（`playbin` + `fbdevsink` + `alsasink`）全屏播放，画面通过黑边适配 1024×600，AAC 音频输出到麦克风所属的 USB 声卡。双击影片后 LVGL 会暂停刷新，播放结束或失败后自动恢复相册画面；播放日志位于 `/tmp/camera_playback.log`。
 
+相册的 `recordings/...` 路径会先解析为绝对路径，再转换为经过百分号编码的 `file:///...` URI，支持空格、中文和 `#` 等文件名字符。不能直接把相对路径拼到 `file://` 后，否则 GStreamer 会把目录当作主机名，报文件不存在。
+
+板端为 LVGL 注册 `nanosleep` 休眠回调，避免默认忙等在暂停界面刷新时仍占满单核 CPU，影响播放器解码和音频输出。交叉构建脚本会根据源码、头文件的依赖时间重新编译，避免链接过期目标文件。
+
+播放路径回归测试（无需摄像头或 GUI）：
+
+```bash
+g++ -std=c++14 -O2 -Wall -Wextra -Iinclude tests/test_playback_uri.cpp \
+    src/fs_compat.cpp src/file_manager/file_manager.cpp -o /tmp/test_playback_uri
+/tmp/test_playback_uri
+```
+
 板端内核默认启用只读参数 `consoleblank=600`。开机守护脚本 `camera_supervisor.sh` 会每秒解除 framebuffer blank，因此相册空闲、录像播放结束或主程序异常退出时都不会永久熄屏；相机进程异常退出后也会在 1～2 秒内自动重启。主程序自身仍每 5 秒发送一次 `FBIOBLANK(UNBLANK)` 作为第二层保护。
 
 PC 端接收服务：

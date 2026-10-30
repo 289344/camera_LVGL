@@ -65,7 +65,8 @@ compile_c() {
   local obj="$OBJ_DIR/${rel//\//_}.o"
   local dep="$obj.d"
   local needs_build=1
-  if [[ -f "$obj" && -f "$dep" ]] && make -q -f "$dep" "$obj" >/dev/null 2>&1; then
+  # .d 只有依赖而没有 recipe；补一个实际 recipe，让 make -q 正确检测过期目标。
+  if [[ -f "$obj" && -f "$dep" ]] && make -rR -q -f "$dep" --eval="$obj: ; @:" "$obj" >/dev/null 2>&1; then
     needs_build=0
   fi
   if [[ "$needs_build" -eq 1 ]]; then
@@ -81,7 +82,7 @@ compile_cxx() {
   local obj="$OBJ_DIR/${rel//\//_}.o"
   local dep="$obj.d"
   local needs_build=1
-  if [[ -f "$obj" && -f "$dep" ]] && make -q -f "$dep" "$obj" >/dev/null 2>&1; then
+  if [[ -f "$obj" && -f "$dep" ]] && make -rR -q -f "$dep" --eval="$obj: ; @:" "$obj" >/dev/null 2>&1; then
     needs_build=0
   fi
   if [[ "$needs_build" -eq 1 ]]; then

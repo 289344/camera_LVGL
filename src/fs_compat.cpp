@@ -2,6 +2,7 @@
 
 #include <cerrno>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <ctime>
 #include <sys/stat.h>
@@ -60,6 +61,30 @@ std::string baseName(const std::string &path) {
     size_t pos = path.find_last_of('/');
     if (pos == std::string::npos) return path;
     return path.substr(pos + 1);
+}
+
+std::string fileUri(const std::string &path) {
+    char *resolved = ::realpath(path.c_str(), nullptr);
+    if (!resolved) return "";
+    const std::string absolutePath(resolved);
+    std::free(resolved);
+
+    // file:// 后必须是绝对路径；空格、#、% 和 UTF-8 字节需要按 URI 编码，
+    // 否则相对目录可能被当作主机名，文件名也可能被截为 fragment/query。
+    constexpr char hex[] = "0123456789ABCDEF";
+    std::string uri = "file://";
+    for (unsigned char c : absolutePath) {
+        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') ||
+            (c >= '0' && c <= '9') || c == '/' || c == '-' ||
+            c == '_' || c == '.' || c == '~') {
+            uri += static_cast<char>(c);
+        } else {
+            uri += '%';
+            uri += hex[c >> 4];
+            uri += hex[c & 0x0f];
+        }
+    }
+    return uri;
 }
 
 uint64_t fileSize(const std::string &path) {

@@ -5,6 +5,8 @@
 #include <climits>
 #include <csignal>
 #include <cstdlib>
+#include <cstdio>
+#include <cstring>
 #include <fcntl.h>
 #include <fstream>
 #include <linux/videodev2.h>
@@ -16,6 +18,7 @@
 #include "preview/pixel_converter.h"
 #include "file_manager/file_manager.h"
 #include "file_transfer/file_transfer_service.h"
+#include "fs_compat.h"
 
 namespace {
 constexpr uint32_t kMJPG = v4l2_fourcc('M', 'J', 'P', 'G');
@@ -555,6 +558,20 @@ void AppController::playSelectedFile() {
     if (previewing_.load() || camera_.isOpen()) stopPreview();
 
 #ifdef CAMERA_LVGL_BOARD
+    // 相册保存的是 recordings/... 相对路径，不能直接拼到 file:// 后。
+    // 在 fork 前解析及编码，文件被移走时直接反馈错误，不启动播放器。
+    const std::string fileUri = fscompat::fileUri(path);
+    if (fileUri.empty()) {
+        ui_->setAlbumHint("无法打开录像: " + std::string(std::strerror(errno)), 0xff5555);
+        ui_->setStatusText("录像文件不可用", 0xff5555);
+        return;
+    }
+    const std::string uri = "uri=" + fileUri;
+    // 640x480 视频用黑边居中到 1024x600，避免软件放大消耗有限的 CPU。
+    const std::string videoSinkOption =
+        "video-sink=videoconvert ! videobox left=-192 right=-192 top=-60 bottom=-60 fill=black ! "
+        "video/x-raw,width=1024,height=600 ! fbdevsink device=/dev/fb0";
+    const std::string audioSinkOption = "audio-sink=alsasink device=" + audioDevice_;
     const pid_t pid = ::fork();
     if (pid == 0) {
         int logFd = ::open("/tmp/camera_playback.log", O_WRONLY | O_CREAT | O_TRUNC, 0644);
@@ -564,17 +581,10 @@ void AppController::playSelectedFile() {
             if (logFd > STDERR_FILENO) ::close(logFd);
         }
 
-        // 640x480 视频用黑边居中到 1024x600，避免软件放大消耗有限的 CPU。
-        const std::string uri = "uri=file://" + path;
-        const std::string videoSink =
-            "videoconvert ! videobox left=-192 right=-192 top=-60 bottom=-60 fill=black ! "
-            "video/x-raw,width=1024,height=600 ! fbdevsink device=/dev/fb0";
-        const std::string audioSink = "alsasink device=" + audioDevice_;
-        const std::string videoSinkOption = "video-sink=" + videoSink;
-        const std::string audioSinkOption = "audio-sink=" + audioSink;
         ::execl("/usr/bin/gst-launch-1.0", "gst-launch-1.0", "-q",
                 "playbin", uri.c_str(), videoSinkOption.c_str(),
                 audioSinkOption.c_str(), static_cast<char *>(nullptr));
+        ::perror("启动 gst-launch-1.0 失败");
         ::_exit(127);
     }
 #else

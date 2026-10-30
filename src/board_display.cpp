@@ -23,6 +23,15 @@ uint32_t tickGetCb() {
     return static_cast<uint32_t>(t.tv_sec * 1000U + t.tv_nsec / 1000000U);
 }
 
+void delayCb(uint32_t ms) {
+    // LV_OS_NONE 下 LVGL 默认忙等；播放时即使暂停刷新也会抢占单核 CPU，
+    // 挤占解码和 ALSA 供数时间。Linux 上用可让出 CPU 的休眠。
+    struct timespec remaining;
+    remaining.tv_sec = ms / 1000U;
+    remaining.tv_nsec = static_cast<long>(ms % 1000U) * 1000000L;
+    while (::nanosleep(&remaining, &remaining) != 0 && errno == EINTR) {}
+}
+
 constexpr int kHorRes = 1024;
 constexpr int kVerRes = 600;
 constexpr int kBytesPerPixel = 4;
@@ -82,6 +91,7 @@ void deleteCb(lv_event_t *e) {
 
 lv_display_t *createDisplay() {
     lv_tick_set_cb(tickGetCb);
+    lv_delay_set_cb(delayCb);
 
     lv_display_t *disp = lv_display_create(kHorRes, kVerRes);
     if (!disp) return nullptr;
