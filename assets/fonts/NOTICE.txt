@@ -1,0 +1,10 @@
+Droid Sans Fallback (DroidSansFallbackFull.ttf)
+
+Copyright (c) 2006, 2007, 2008, 2009, 2010 Google Corp.
+Droid is a trademark of Google Corp.
+
+Licensed under the Apache License, Version 2.0.
+The full license is included in LICENSE.txt in this directory.
+
+Upstream source: https://android.googlesource.com/platform/frameworks/base/
+Copyright and license information: fonts-droid-fallback package copyright file.

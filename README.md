@@ -1,6 +1,6 @@
 # camera_LVGL
 
-基于 LVGL 的嵌入式相机控制与视频管理应用（第一阶段：Ubuntu 24.04 PC 版）。
+基于 LVGL 的嵌入式 Linux 相机控制与视频管理应用，支持 Ubuntu 24.04 PC 端和 i.MX6ULL / Buildroot 板端。
 
 实现功能：
 - LVGL 图形界面（SDL 窗口，支持鼠标）
@@ -238,3 +238,8 @@ adb shell '/etc/init.d/S99camera start'
 adb shell '/etc/init.d/S99camera stop'
 adb shell '/etc/init.d/S99camera restart'
 ```
+
+## 第三方组件许可
+
+- 内置的 [LVGL](third_party/lvgl/) 使用 [MIT 许可证](third_party/lvgl/LICENCE.txt)，其依赖说明见 [COPYRIGHTS.md](third_party/lvgl/COPYRIGHTS.md)。
+- 内置的 Droid Sans Fallback 字体使用 [Apache-2.0 许可证](assets/fonts/LICENSE.txt)，版权信息见 [NOTICE.txt](assets/fonts/NOTICE.txt)。
